@@ -31,10 +31,6 @@ export async function GET(request) {
     if (!payload) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     
     const admins = await db.query('SELECT * FROM admins');
-    const filtered = admins.map(({ password, ...admin }) => ({
-      ...admin,
-      permissions: parsePermissions(admin.permissions),
-    }));
     const filtered = admins.map(({ password, ...admin }) => {
       let perms = parsePermissions(admin.permissions);
       if (admin.role === 'staff' && !perms.includes('dashboard')) {
