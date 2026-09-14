@@ -11,8 +11,8 @@
     {
       "username": "Bhaskar",
       "email": "bhskrbnsl@gmail.com",
-      "password": "$2b$10$Wr9mUgqrJPch7Avu.RaYN.NBnhmKo.sdaZTajo6Lo5QiA0EVJ7qb.",
-      "role": "staff",
+      "password": "$2b$10$DnFxhffr0wlYGQPYlF.gyOMXF9KCY258FpfAvvFydCrEwrNqrNnVy",
+      "role": "super_admin",
       "permissions": [
         "dashboard",
         "banner",

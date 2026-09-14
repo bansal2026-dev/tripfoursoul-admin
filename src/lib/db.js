@@ -36,14 +36,19 @@ if (!useJsonFallback && process.env.DATABASE_URL) {
         connectionString = connectionString.split('?')[0];
       }
 
+      const maxPoolSize = process.env.PGMAX_POOL_SIZE
+        ? parseInt(process.env.PGMAX_POOL_SIZE, 10)
+        : (process.env.NODE_ENV === 'production' ? 5 : 10);
+
       pool = new Pool({
         connectionString: connectionString,
         ssl: process.env.PGSSL === 'true' ? { rejectUnauthorized: false } : undefined,
-        max: 1,
-        idleTimeoutMillis: 5000,
-        connectionTimeoutMillis: 10000,
-        query_timeout: 10000,
-        allowExitOnIdle: true
+        max: maxPoolSize,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 15000,
+        query_timeout: 25000,
+        keepAlive: true,
+        keepAliveInitialDelayMillis: 10000,
       });
       // Handle idle client errors to prevent crashes
       pool.on('error', (err) => {
@@ -58,11 +63,48 @@ if (!useJsonFallback && process.env.DATABASE_URL) {
   }
 }
 
+// Transient connection error detector for automatic retries
+const isTransientConnectionError = (error) => {
+  if (!error) return false;
+  const msg = (error.message || '').toLowerCase();
+  const code = (error.code || '').toLowerCase();
+  return (
+    msg.includes('query read timeout') ||
+    msg.includes('timeout') ||
+    msg.includes('connection terminated') ||
+    msg.includes('connection closed') ||
+    msg.includes('econnreset') ||
+    msg.includes('client was closed') ||
+    msg.includes('socket has been ended') ||
+    code === '57p01' || // admin_shutdown
+    code === '57p02' || // crash_shutdown
+    code === '57p03'    // cannot_connect_now
+  );
+};
+
+// Retry transient connection drops/timeouts with a fresh connection from the pool
+const executeWithRetry = async (fn, maxRetries = 1) => {
+  let attempt = 0;
+  while (true) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (attempt < maxRetries && isTransientConnectionError(error)) {
+        attempt += 1;
+        console.warn(`PostgreSQL transient error (${error.message}). Retrying query (attempt ${attempt}/${maxRetries})...`);
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        continue;
+      }
+      throw error;
+    }
+  }
+};
+
 // Check if PostgreSQL is actually reachable (not just configured)
 const isPostgresAvailable = async () => {
   if (!pgAvailable || !pool) return false;
   try {
-    await pool.query('SELECT 1');
+    await executeWithRetry(() => pool.query('SELECT 1'));
     return true;
   } catch (error) {
     console.warn('PostgreSQL connection check failed:', error.message);
@@ -171,7 +213,7 @@ const query = async (sql, params = []) => {
 
     try {
       const pgSql = convertPlaceholders(sql);
-      const result = await pool.query(pgSql, params);
+      const result = await executeWithRetry(() => pool.query(pgSql, params));
 
       // For INSERT with RETURNING, return the row
       if (result.rows && result.rows.length > 0) {
@@ -194,7 +236,7 @@ const query = async (sql, params = []) => {
   if (pgAvailable && pool) {
     try {
       const pgSql = convertPlaceholders(sql);
-      const result = await pool.query(pgSql, params);
+      const result = await executeWithRetry(() => pool.query(pgSql, params));
       return processRows(result.rows || []);
     } catch (error) {
       // If PostgreSQL is configured but query fails (e.g. table doesn't exist),

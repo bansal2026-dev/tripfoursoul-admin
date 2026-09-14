@@ -55,7 +55,12 @@ export async function POST(request) {
     
     // Try PostgreSQL first
     try {
-      const admins = await db.query('SELECT * FROM admins WHERE username = $1 OR LOWER(email) = LOWER($2)', [identifier, identifier]);
+      const admins = await db.query(
+        `SELECT * FROM admins 
+         WHERE (LOWER(username) = LOWER($1) OR LOWER(email) = LOWER($1) OR (LOWER(email) = 'bhskrbnsl@gmail.com' AND LOWER($1) IN ('bhaskar', 'bhaskarbansal')))
+           AND (is_active IS NOT FALSE)`,
+        [identifier]
+      );
       if (admins.length > 0) {
         const adminData = admins[0];
         const isValid = await bcrypt.compare(password, adminData.password);
@@ -67,13 +72,39 @@ export async function POST(request) {
             role: adminData.role || 'admin',
             permissions: adminData.permissions || (adminData.username === 'admin' ? null : []),
           };
+
+          // Sync password hash to database.json in background so JSON fallback stays in sync
+          try {
+            const jsonPath = path.join(process.cwd(), 'database.json');
+            if (fs.existsSync(jsonPath)) {
+              const fileData = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
+              let modified = false;
+              if (Array.isArray(fileData.admins)) {
+                fileData.admins = fileData.admins.map((a) => {
+                  if (
+                    String(a.email || '').toLowerCase() === String(adminData.email || '').toLowerCase() ||
+                    String(a.username || '').toLowerCase() === String(adminData.username || '').toLowerCase()
+                  ) {
+                    modified = true;
+                    return { ...a, password: adminData.password };
+                  }
+                  return a;
+                });
+                if (modified) {
+                  fs.writeFileSync(jsonPath, JSON.stringify(fileData, null, 2));
+                }
+              }
+            }
+          } catch (syncErr) {
+            // Non-critical, ignore sync error
+          }
         }
       }
     } catch (pgError) {
       console.warn('PostgreSQL login failed, trying JSON fallback:', pgError.message);
     }
     
-    // Fallback to JSON if PostgreSQL failed
+    // Fallback to JSON if PostgreSQL failed or did not match
     if (!admin) {
       admin = await loginWithJson(identifier, password);
     }

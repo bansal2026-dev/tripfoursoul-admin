@@ -24,11 +24,23 @@ const normalizeOptionalRichText = (value) => {
   return text ? value.trim() : '';
 };
 
+const parseGalleryImages = (value) => {
+  if (Array.isArray(value)) return value;
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
 const normalizePackageOptionalSections = (packageItem) => ({
   ...packageItem,
   additional_info: normalizeOptionalRichText(packageItem.additional_info),
   inclusives: normalizeOptionalRichText(packageItem.inclusives),
   exclusives: normalizeOptionalRichText(packageItem.exclusives),
+  gallery_images: parseGalleryImages(packageItem.gallery_images),
 });
 
 let packageSchemaMigration;
@@ -40,6 +52,7 @@ const ensurePackageSchema = () => {
       db.query("ALTER TABLE packages ADD COLUMN IF NOT EXISTS price_usd VARCHAR(50) DEFAULT ''"),
       db.query("ALTER TABLE packages ADD COLUMN IF NOT EXISTS price_inr VARCHAR(50) DEFAULT ''"),
       db.query("ALTER TABLE packages ADD COLUMN IF NOT EXISTS price_eur VARCHAR(50) DEFAULT ''"),
+      db.query('ALTER TABLE packages ADD COLUMN IF NOT EXISTS gallery_images JSONB'),
     ]).catch((error) => {
       packageSchemaMigration = null;
       throw error;
@@ -83,7 +96,7 @@ export async function GET(request) {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { destination_id, title, days, meals, short_description, long_description, sub_heading, itinerary, additional_info, image_url, inclusives, exclusives, price, price_usd, price_inr, price_eur, sort_order = 0, is_trending = false, is_spiritual = false } = body;
+    const { destination_id, title, days, meals, short_description, long_description, sub_heading, itinerary, additional_info, image_url, gallery_images, inclusives, exclusives, price, price_usd, price_inr, price_eur, sort_order = 0, is_trending = false, is_spiritual = false } = body;
     if (!destination_id || !title) {
       return NextResponse.json({ error: 'Destination and package title are required' }, { status: 400 });
     }
@@ -102,9 +115,14 @@ export async function POST(request) {
       }
     }
 
+    const galleryImages = Array.isArray(gallery_images)
+      ? gallery_images.map(String).filter(Boolean)
+      : (image_url ? [image_url] : []);
+
     const packageItem = await db.insert('packages', {
       destination_id: Number(destination_id), title, slug: makeSlug(title), days, meals,
       short_description, long_description, sub_heading, itinerary, additional_info, image_url,
+      gallery_images: JSON.stringify(galleryImages),
       inclusives: normalizeOptionalRichText(inclusives), exclusives: normalizeOptionalRichText(exclusives), price, price_usd, price_inr, price_eur, sort_order: packageSort, is_trending: Boolean(is_trending), is_spiritual: Boolean(is_spiritual), is_active: true,
     });
     return NextResponse.json({ success: true, id: packageItem.id });
@@ -117,7 +135,7 @@ export async function PUT(request) {
   try {
     const body = await request.json();
     const {
-      id, destination_id, title, days, meals, short_description, long_description, sub_heading, itinerary, additional_info, image_url, inclusives, exclusives,
+      id, destination_id, title, days, meals, short_description, long_description, sub_heading, itinerary, additional_info, image_url, gallery_images, inclusives, exclusives,
       price, price_usd, price_inr, price_eur, is_active, sort_order, is_trending, is_spiritual,
     } = body;
     if (!id || !destination_id || !title) {
@@ -147,7 +165,7 @@ export async function PUT(request) {
       }
     }
 
-    const updated = await db.update('packages', Number(id), {
+    const updatedData = {
       destination_id: destination_id !== undefined ? Number(destination_id) : existing.destination_id,
       title: title !== undefined ? title : existing.title,
       slug: makeSlug(title !== undefined ? title : existing.title),
@@ -169,7 +187,15 @@ export async function PUT(request) {
       is_trending: is_trending !== undefined ? Boolean(is_trending) : existing.is_trending,
       is_spiritual: is_spiritual !== undefined ? Boolean(is_spiritual) : existing.is_spiritual,
       is_active: nextActive,
-    });
+    };
+
+    if (gallery_images !== undefined) {
+      updatedData.gallery_images = JSON.stringify(
+        Array.isArray(gallery_images) ? gallery_images.map(String).filter(Boolean) : []
+      );
+    }
+
+    await db.update('packages', Number(id), updatedData);
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

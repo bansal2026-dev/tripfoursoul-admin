@@ -55,6 +55,7 @@ ALTER TABLE IF EXISTS destinations ADD COLUMN IF NOT EXISTS price_usd VARCHAR(50
 ALTER TABLE IF EXISTS destinations ADD COLUMN IF NOT EXISTS price_inr VARCHAR(50) DEFAULT '';
 ALTER TABLE IF EXISTS destinations ADD COLUMN IF NOT EXISTS price_eur VARCHAR(50) DEFAULT '';
 ALTER TABLE IF EXISTS destinations ADD COLUMN IF NOT EXISTS gallery_images JSONB;
+ALTER TABLE IF EXISTS packages ADD COLUMN IF NOT EXISTS gallery_images JSONB;
 ALTER TABLE IF EXISTS testimonials ALTER COLUMN image_url TYPE TEXT;
 ALTER TABLE IF EXISTS about_us ALTER COLUMN image_url TYPE TEXT;
 ALTER TABLE IF EXISTS about_us ALTER COLUMN experience_image TYPE TEXT;
@@ -429,6 +430,7 @@ CREATE TABLE IF NOT EXISTS packages (
   long_description TEXT,
   sub_heading VARCHAR(255) DEFAULT '',
   image_url TEXT DEFAULT '',
+  gallery_images JSONB,
   inclusives TEXT,
   exclusives TEXT,
   itinerary TEXT,
@@ -441,6 +443,9 @@ CREATE TABLE IF NOT EXISTS packages (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_packages_destination_id ON packages(destination_id);
+CREATE INDEX IF NOT EXISTS idx_packages_sort_order ON packages(sort_order);
 
 -- Page banners table
 CREATE TABLE IF NOT EXISTS page_banners (

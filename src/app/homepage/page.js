@@ -50,6 +50,7 @@ function HomepageSettingsPageContent() {
 
   // Banner images state
   const [bannerImages, setBannerImages] = useState([]);
+  const [deletedBannerImageIds, setDeletedBannerImageIds] = useState([]);
   const [newBannerImageUrl, setNewBannerImageUrl] = useState("");
   const [bannerUploading, setBannerUploading] = useState(false);
   const bannerFileInputRef = useRef(null);
@@ -398,15 +399,11 @@ function HomepageSettingsPageContent() {
       const data = await res.json();
 
       if (res.ok && data.imageUrl) {
-        const addRes = await fetch("/api/banner/images", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ image_url: data.imageUrl, sort_order: bannerImages.length }),
-        });
-        if (addRes.ok) {
-          showMessage("Image uploaded and added successfully!");
-          fetchAllData();
-        }
+        setBannerImages((prev) => [
+          ...prev,
+          { id: "temp-" + Date.now(), image_url: data.imageUrl, isNew: true },
+        ]);
+        showMessage("Image uploaded! Click 'Save Banner Images' to save to database.", "success");
       } else {
         showMessage(data.error || "Failed to upload image", "error");
       }
@@ -437,19 +434,7 @@ function HomepageSettingsPageContent() {
 
       if (res.ok && result.imageUrl) {
         updateAboutField("image_url", result.imageUrl);
-        // Persist immediately so the uploaded image is saved to the backend and
-        // shows on the website right away — no separate "Save" click needed.
-        const saveRes = await fetch("/api/about", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...(data.about?.about || {}), image_url: result.imageUrl }),
-        });
-        if (saveRes.ok) {
-          showMessage("About image uploaded & saved successfully!");
-          fetchAllData();
-        } else {
-          showMessage("Image uploaded, but saving failed. Please click 'Save About Settings'.", "error");
-        }
+        showMessage("About image uploaded! Click 'Save About Settings' below to save to database.", "success");
       } else {
         showMessage(result.error || "Failed to upload image", "error");
       }
@@ -461,33 +446,54 @@ function HomepageSettingsPageContent() {
     }
   };
 
-  const handleAddBannerImageUrl = async () => {
+  const handleAddBannerImageUrl = () => {
     if (!newBannerImageUrl.trim()) return;
-    try {
-      const res = await fetch("/api/banner/images", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image_url: newBannerImageUrl, sort_order: bannerImages.length }),
-      });
-      if (res.ok) {
-        setNewBannerImageUrl("");
-        showMessage("Banner image added successfully!");
-        fetchAllData();
-      }
-    } catch (error) {
-      showMessage("Error adding banner image", "error");
+    setBannerImages((prev) => [
+      ...prev,
+      { id: "temp-" + Date.now(), image_url: newBannerImageUrl.trim(), isNew: true },
+    ]);
+    setNewBannerImageUrl("");
+    showMessage("Image added! Click 'Save Banner Images' to save to database.", "success");
+  };
+
+  const handleDeleteBannerImage = (id) => {
+    setBannerImages((prev) => prev.filter((img) => img.id !== id));
+    if (typeof id === "number" || (typeof id === "string" && !id.startsWith("temp-"))) {
+      setDeletedBannerImageIds((prev) => [...prev, id]);
     }
   };
 
-  const handleDeleteBannerImage = async (id) => {
-    if (!confirm("Are you sure you want to delete this banner image?")) return;
+  const handleSaveBannerImages = async () => {
     try {
-      await fetch(`/api/banner/images?id=${id}`, { method: "DELETE" });
-      showMessage("Banner image deleted successfully!");
+      if (deletedBannerImageIds.length > 0) {
+        await Promise.all(
+          deletedBannerImageIds.map((id) => fetch(`/api/banner/images?id=${id}`, { method: "DELETE" }))
+        );
+        setDeletedBannerImageIds([]);
+      }
+      const newImages = bannerImages.filter((img) => img.isNew);
+      if (newImages.length > 0) {
+        await Promise.all(
+          newImages.map((img, idx) =>
+            fetch("/api/banner/images", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ image_url: img.image_url, sort_order: bannerImages.length + idx }),
+            })
+          )
+        );
+      }
+      showMessage("Banner images saved successfully!");
       fetchAllData();
     } catch (error) {
-      showMessage("Error deleting banner image", "error");
+      showMessage("Error saving banner images", "error");
     }
+  };
+
+  const handleSaveBanner = async (e) => {
+    if (e) e.preventDefault();
+    await save("/api/banner", { ...data.banner?.settings });
+    await handleSaveBannerImages();
   };
 
   if (loading) return <div className="flex min-h-screen"><Sidebar /><main className="flex-1 p-8">Loading...</main></div>;
@@ -528,7 +534,7 @@ function HomepageSettingsPageContent() {
             <div className="admin-card mb-8">
               <h2 className="text-lg font-semibold mb-4">Banner Settings</h2>
               {data.banner?.settings && (
-                <form onSubmit={(e) => { e.preventDefault(); save("/api/banner", { ...data.banner.settings }); }} className="space-y-4">
+                <form onSubmit={handleSaveBanner} className="space-y-4">
                   <div>
                     <label className="admin-label">Heading</label>
                     <input type="text" value={data.banner.settings.heading || ""} onChange={(e) => updateBannerField("heading", e.target.value)} className="admin-input" />
@@ -613,6 +619,11 @@ function HomepageSettingsPageContent() {
               {bannerImages.length === 0 && (
                 <p className="text-gray-400 text-sm">No banner images added yet.</p>
               )}
+              <div className="mt-6 flex justify-end">
+                <button type="button" onClick={handleSaveBannerImages} className="admin-btn">
+                  Save Banner Images
+                </button>
+              </div>
             </div>
           </>
         )}

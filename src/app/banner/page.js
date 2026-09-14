@@ -53,18 +53,45 @@ export default function BannerPage() {
     return () => { active = false; };
   }, []);
 
+  const [deletedImageIds, setDeletedImageIds] = useState([]);
+
   const handleSaveSettings = async () => {
     setSaving(true);
     setMessage("");
     try {
+      // 1. Save banner text settings
       const res = await fetch("/api/banner", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(settings),
       });
+
+      // 2. Delete removed images from database
+      if (deletedImageIds.length > 0) {
+        await Promise.all(
+          deletedImageIds.map((id) => fetch(`/api/banner/images?id=${id}`, { method: "DELETE" }))
+        );
+        setDeletedImageIds([]);
+      }
+
+      // 3. Save newly uploaded / added images to database
+      const newImages = images.filter((img) => img.isNew);
+      if (newImages.length > 0) {
+        await Promise.all(
+          newImages.map((img, idx) =>
+            fetch("/api/banner/images", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ image_url: img.image_url, sort_order: images.length + idx }),
+            })
+          )
+        );
+      }
+
       if (res.ok) {
-        setMessage("Banner settings saved successfully!");
+        setMessage("Banner settings and images saved successfully!");
         setTimeout(() => setMessage(""), 3000);
+        fetchBannerData();
       }
     } catch (error) {
       setMessage("Error saving settings");
@@ -73,21 +100,15 @@ export default function BannerPage() {
     }
   };
 
-  const handleAddImage = async () => {
+  const handleAddImage = () => {
     if (!newImageUrl.trim()) return;
-    try {
-      const res = await fetch("/api/banner/images", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image_url: newImageUrl, sort_order: images.length }),
-      });
-      if (res.ok) {
-        setNewImageUrl("");
-        fetchBannerData();
-      }
-    } catch (error) {
-      console.error("Error:", error);
-    }
+    setImages((prev) => [
+      ...prev,
+      { id: "temp-" + Date.now(), image_url: newImageUrl.trim(), isNew: true },
+    ]);
+    setNewImageUrl("");
+    setMessage("Image added to list. Click 'Save Banner Settings' below to save changes.");
+    setTimeout(() => setMessage(""), 4000);
   };
 
   const handleFileUpload = async (e) => {
@@ -107,17 +128,13 @@ export default function BannerPage() {
       const data = await res.json();
 
       if (res.ok && data.imageUrl) {
-        // Automatically add the uploaded image to banner
-        const addRes = await fetch("/api/banner/images", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ image_url: data.imageUrl, sort_order: images.length }),
-        });
-        if (addRes.ok) {
-          setMessage("Image uploaded and added successfully!");
-          setTimeout(() => setMessage(""), 3000);
-          fetchBannerData();
-        }
+        // Add to preview state only - saved to DB when user clicks Save Banner Settings
+        setImages((prev) => [
+          ...prev,
+          { id: "temp-" + Date.now(), image_url: data.imageUrl, isNew: true },
+        ]);
+        setMessage("Image uploaded! Click 'Save Banner Settings' below to save changes.");
+        setTimeout(() => setMessage(""), 4000);
       } else {
         setMessage(data.error || "Failed to upload image");
         setTimeout(() => setMessage(""), 3000);
@@ -134,12 +151,10 @@ export default function BannerPage() {
     }
   };
 
-  const handleDeleteImage = async (id) => {
-    try {
-      await fetch(`/api/banner/images?id=${id}`, { method: "DELETE" });
-      fetchBannerData();
-    } catch (error) {
-      console.error("Error:", error);
+  const handleDeleteImage = (id) => {
+    setImages((prev) => prev.filter((img) => img.id !== id));
+    if (typeof id === "number" || (typeof id === "string" && !id.startsWith("temp-"))) {
+      setDeletedImageIds((prev) => [...prev, id]);
     }
   };
 

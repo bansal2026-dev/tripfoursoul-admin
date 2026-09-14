@@ -17,10 +17,14 @@ function NewPackageContent() {
   const searchParams = useSearchParams();
   const destParam = searchParams.get("destination_id") || "";
   const [destinations, setDestinations] = useState([]);
+  const MAX_PACKAGE_IMAGES = 8;
+  const MAX_IMAGE_SIZE = 1 * 1024 * 1024; // 1 MB
+
   const [form, setForm] = useState({
     destination_id: destParam, title: "", days: "", meals: "", short_description: "",
     long_description: "", sub_heading: "", itinerary: "", additional_info: "", image_url: "",
-    inclusives: "", exclusives: "", price_currency: "USD", price_value: "", sort_order: 0, is_trending: false, is_spiritual: false,
+    gallery_images: [], inclusives: "", exclusives: "", price_currency: "USD", price_value: "",
+    sort_order: 0, is_trending: false, is_spiritual: false,
   });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useStatusToast();
@@ -50,17 +54,21 @@ function NewPackageContent() {
   };
 
   const save = async () => {
-    if (!form.image_url) {
+    if (!form.gallery_images.length && !form.image_url) {
       notify("Package image is required");
       return;
     }
+    const coverImage = (form.image_url && form.gallery_images.includes(form.image_url))
+      ? form.image_url
+      : (form.gallery_images[0] || form.image_url);
+
     setSaving(true);
     try {
       const priceFields = buildPricePayload(form.price_currency, form.price_value);
       const response = await fetch("/api/packages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, ...priceFields }),
+        body: JSON.stringify({ ...form, image_url: coverImage, gallery_images: form.gallery_images, ...priceFields }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Unable to save package");
@@ -69,19 +77,62 @@ function NewPackageContent() {
     finally { setSaving(false); }
   };
 
-  const upload = async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const handleImageUpload = async (e) => {
+    const remainingSlots = MAX_PACKAGE_IMAGES - form.gallery_images.length;
+    const files = Array.from(e.target.files || []);
+    const clearSelectedFiles = () => { if (fileInputRef.current) fileInputRef.current.value = ''; };
+    if (!files.length || remainingSlots <= 0) {
+      notify(`A package can have a maximum of ${MAX_PACKAGE_IMAGES} images`);
+      clearSelectedFiles();
+      return;
+    }
+    if (files.length > remainingSlots) {
+      notify(`You can upload only ${remainingSlots} more image${remainingSlots > 1 ? "s" : ""} for this package`);
+      clearSelectedFiles();
+      return;
+    }
+    if (files.some((file) => file.type !== "image/webp")) {
+      notify("Upload failed: only WebP (.webp) images are accepted");
+      clearSelectedFiles();
+      return;
+    }
+    if (files.some((file) => file.size > MAX_IMAGE_SIZE)) {
+      notify("Upload failed: each image must be 1 MB or smaller");
+      clearSelectedFiles();
+      return;
+    }
+    setMessage("");
     setUploading(true);
     try {
-      const payload = new FormData();
-      payload.append("file", file);
-      const response = await fetch("/api/upload", { method: "POST", body: payload });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Image upload failed");
-      setForm((current) => ({ ...current, image_url: data.imageUrl }));
-    } catch (error) { notify(error.message); }
-    finally { setUploading(false); if (fileInputRef.current) fileInputRef.current.value = ""; }
+      const uploads = await Promise.all(files.map(async (file) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await fetch("/api/upload", { method: "POST", body: formData });
+        const data = await res.json();
+        if (!res.ok || !data.imageUrl) throw new Error(data.error || "Image upload failed");
+        return data.imageUrl;
+      }));
+      setForm((current) => {
+        const gallery_images = [...current.gallery_images, ...uploads];
+        return { ...current, gallery_images, image_url: current.image_url || gallery_images[0] };
+      });
+      notify("Image(s) uploaded successfully!");
+    } catch (error) {
+      notify(error.message || "Error uploading image");
+    } finally {
+      setUploading(false);
+      clearSelectedFiles();
+    }
+  };
+
+  const removeImage = (index) => {
+    setForm((current) => {
+      const removedUrl = current.gallery_images[index];
+      const gallery_images = current.gallery_images.filter((_, i) => i !== index);
+      const isCoverRemoved = current.image_url === removedUrl;
+      const image_url = isCoverRemoved ? (gallery_images[0] || "") : current.image_url;
+      return { ...current, gallery_images, image_url };
+    });
   };
 
   return (
@@ -186,14 +237,64 @@ function NewPackageContent() {
               </label>
             </div>
             <div className="md:col-span-2">
-              <label className="admin-label">Package Image *</label>
-              <input ref={fileInputRef} type="file" accept="image/webp" onChange={upload} className="admin-input" disabled={uploading} />
-              <p className="mt-1 text-xs text-gray-500">WebP only, up to 1 MB. An image is required.</p>
-              {uploading && <p className="mt-1 text-sm text-gray-500">Uploading...</p>}
-              {form.image_url && (
-                <div className="mt-3 flex items-start gap-3">
-                  <img src={form.image_url} alt="Package preview" className="h-32 w-48 rounded-lg object-cover" />
-                  <button type="button" onClick={() => setForm((current) => ({ ...current, image_url: "" }))} className="admin-btn-danger text-xs whitespace-nowrap">Remove Image</button>
+              <label className="admin-label">Package Images *</label>
+              <div className="flex gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept="image/webp"
+                  onChange={handleImageUpload}
+                  className="admin-input flex-1"
+                  disabled={uploading || form.gallery_images.length >= MAX_PACKAGE_IMAGES}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="admin-btn-secondary text-xs whitespace-nowrap"
+                  disabled={uploading || form.gallery_images.length >= MAX_PACKAGE_IMAGES}
+                >
+                  {uploading ? "Uploading..." : "Upload"}
+                </button>
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                Upload up to {MAX_PACKAGE_IMAGES} WebP images, max 1 MB each. Click &quot;Set as Cover&quot; on any image to choose your cover photo. Cover photo will only show on cards; other images will show inside the package page. ({form.gallery_images.length}/{MAX_PACKAGE_IMAGES})
+              </p>
+              {form.gallery_images.length > 0 && (
+                <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {form.gallery_images.map((url, index) => {
+                    const isCover = form.image_url ? url === form.image_url : index === 0;
+                    return (
+                      <div
+                        key={`${url}-${index}`}
+                        className={`relative rounded-lg overflow-hidden border transition-all ${
+                          isCover ? "ring-2 ring-emerald-500 border-emerald-500 shadow-sm" : "border-gray-200"
+                        }`}
+                      >
+                        <img src={url} alt="Package preview" className="w-full h-24 object-cover" />
+                        {isCover ? (
+                          <span className="absolute top-1 left-1 rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] font-semibold text-white shadow-sm flex items-center gap-1">
+                            ✓ Cover
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setForm((c) => ({ ...c, image_url: url }))}
+                            className="absolute top-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white hover:bg-black/80 transition-colors backdrop-blur-sm"
+                          >
+                            Set as Cover
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => removeImage(index)}
+                          className="absolute top-1 right-1 rounded-full bg-red-600 text-white w-5 h-5 flex items-center justify-center text-xs hover:bg-red-700 shadow-sm"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

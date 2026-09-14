@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { randomInt } from 'crypto';
 import nodemailer from 'nodemailer';
 import db from '@/lib/db';
+import fs from 'fs';
+import path from 'path';
 
 const OTP_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
@@ -75,14 +77,42 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Email is required' }, { status: 400 });
     }
 
-    await ensureOTPColumns();
+    try {
+      await ensureOTPColumns();
+    } catch (e) {
+      console.warn('Could not ensure OTP columns in PG:', e.message);
+    }
 
-    const admins = await db.query(
-      'SELECT id, email FROM admins WHERE LOWER(email) = LOWER($1) AND is_active = true',
-      [email.trim()]
-    );
+    let targetAdmin = null;
 
-    if (!admins.length) {
+    // 1. Try PostgreSQL
+    try {
+      const admins = await db.query(
+        'SELECT id, email FROM admins WHERE LOWER(email) = LOWER($1) AND (is_active IS NOT FALSE)',
+        [email.trim()]
+      );
+      if (admins.length > 0) targetAdmin = admins[0];
+    } catch (pgErr) {
+      console.warn('PostgreSQL forgot password lookup error:', pgErr.message);
+    }
+
+    // 2. Try JSON fallback if not found in PG
+    if (!targetAdmin) {
+      try {
+        const jsonPath = path.join(process.cwd(), 'database.json');
+        if (fs.existsSync(jsonPath)) {
+          const fileData = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
+          const found = (fileData.admins || []).find(
+            (a) => String(a.email || '').toLowerCase() === email.trim().toLowerCase()
+          );
+          if (found) targetAdmin = found;
+        }
+      } catch (jsonErr) {
+        console.warn('JSON lookup error:', jsonErr.message);
+      }
+    }
+
+    if (!targetAdmin) {
       return NextResponse.json({
         success: true,
         message: 'If an account exists for that email, an OTP has been sent.',
@@ -92,12 +122,38 @@ export async function POST(request) {
     const otp = generateOTP();
     const expiresAt = new Date(Date.now() + OTP_TTL_MS).toISOString();
 
-    await db.update('admins', admins[0].id, {
-      otp_code: otp,
-      otp_expires_at: expiresAt,
-    });
+    // Save OTP to PostgreSQL
+    if (targetAdmin.id) {
+      try {
+        await db.update('admins', targetAdmin.id, {
+          otp_code: otp,
+          otp_expires_at: expiresAt,
+        });
+      } catch (pgUpdateErr) {
+        console.warn('Could not save OTP to PG:', pgUpdateErr.message);
+      }
+    }
 
-    const emailSent = await sendOTPEmail(admins[0].email, otp).catch((err) => {
+    // Also sync OTP to database.json
+    try {
+      const jsonPath = path.join(process.cwd(), 'database.json');
+      if (fs.existsSync(jsonPath)) {
+        const fileData = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
+        if (Array.isArray(fileData.admins)) {
+          fileData.admins = fileData.admins.map((a) => {
+            if (String(a.email || '').toLowerCase() === email.trim().toLowerCase()) {
+              return { ...a, otp_code: otp, otp_expires_at: expiresAt };
+            }
+            return a;
+          });
+          fs.writeFileSync(jsonPath, JSON.stringify(fileData, null, 2));
+        }
+      }
+    } catch (jsonSaveErr) {
+      console.warn('Could not sync OTP to database.json:', jsonSaveErr.message);
+    }
+
+    const emailSent = await sendOTPEmail(targetAdmin.email, otp).catch((err) => {
       console.error('SMTP error:', err.message);
       return false;
     });

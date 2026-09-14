@@ -239,7 +239,7 @@ export default function EditDestinationPage() {
                 </button>
               </div>
               <p className="mt-1 text-xs text-gray-500">
-                Upload up to {MAX_DESTINATION_IMAGES} WebP images, max 1 MB each. Click &quot;Set as Cover&quot; on any image to choose your main cover photo. ({form.gallery_images.length}/{MAX_DESTINATION_IMAGES})
+                Upload up to {MAX_DESTINATION_IMAGES} WebP images, max 1 MB each. Click &quot;Set as Cover&quot; on any image to choose your cover photo. Cover photo will only show on cards; other images will show inside the destination page. ({form.gallery_images.length}/{MAX_DESTINATION_IMAGES})
               </p>
               {form.gallery_images.length > 0 && (
                 <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">

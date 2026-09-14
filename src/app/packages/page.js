@@ -34,17 +34,28 @@ function PackagesPageContent() {
 
   useEffect(() => {
     let active = true;
-    (async () => {
+    const fetchPackages = async (retry = 0) => {
       try {
         const packagesResponse = await fetch(`/api/packages?all=true${selectedDestinationId ? `&destination_id=${selectedDestinationId}` : ""}`);
         const packagesData = await packagesResponse.json();
-        if (!packagesResponse.ok) throw new Error(packagesData.error || "Could not load packages");
+        if (!packagesResponse.ok) {
+          if (retry < 1 && active) {
+            await new Promise((r) => setTimeout(r, 1000));
+            if (active) return fetchPackages(retry + 1);
+          }
+          throw new Error(packagesData.error || "Could not load packages");
+        }
         if (active) {
           setPackages(packagesData.packages || []);
         }
-      } catch (error) { console.error(error); if (active) toast.error(error.message || "Could not load packages"); }
-      finally { if (active) setLoading(false); }
-    })();
+      } catch (error) {
+        console.error(error);
+        if (active) toast.error(error.message || "Could not load packages");
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    fetchPackages();
     return () => { active = false; };
   }, [selectedDestinationId]);
 

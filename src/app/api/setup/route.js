@@ -401,6 +401,7 @@ export async function GET() {
           long_description TEXT,
           sub_heading VARCHAR(255) DEFAULT '',
           image_url TEXT DEFAULT '',
+          gallery_images JSONB,
           inclusives TEXT,
           exclusives TEXT,
           itinerary TEXT,
@@ -414,6 +415,7 @@ export async function GET() {
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
       `);
+      try { await db.query('ALTER TABLE packages ADD COLUMN IF NOT EXISTS gallery_images JSONB'); } catch (e) {}
 
       // Create page_banners table
       await db.query(`

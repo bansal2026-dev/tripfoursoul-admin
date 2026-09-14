@@ -17,8 +17,8 @@ export async function GET(request) {
 
     let account = null;
     try {
-      const admins = await db.query('SELECT id, username, email, role, permissions, is_active, created_at FROM admins');
-      account = admins.find((item) => Number(item.id) === Number(payload.id));
+      const admins = await db.query('SELECT id, username, email, role, permissions, is_active, created_at FROM admins WHERE id = $1', [payload.id]);
+      account = admins[0] || null;
     } catch {
       // The signed token remains sufficient if the database is temporarily unavailable.
     }
