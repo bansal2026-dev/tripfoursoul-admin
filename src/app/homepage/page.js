@@ -730,7 +730,6 @@ function HomepageSettingsPageContent() {
                     />
                   </div>
                   {data.about.about.image_url ? (
-                    <div className="mt-2">
                     <div className="mt-2 flex items-center gap-3">
                       <img src={data.about.about.image_url} alt="About section" className="w-48 h-32 object-cover rounded-lg border border-gray-200" />
                       <button
@@ -959,10 +958,8 @@ function HomepageSettingsPageContent() {
                       </button>
                     </div>
                     {testimonialForm.image_url && (
-                      <div className="mt-2">
                       <div className="mt-2 flex items-center gap-2">
                         <img src={testimonialForm.image_url} alt="Preview" className="w-16 h-16 object-cover rounded-full border border-gray-200" />
-                        <p className="text-xs text-gray-500 mt-1">Image uploaded</p>
                         <button
                           type="button"
                           onClick={() => setTestimonialForm((prev) => ({ ...prev, image_url: "" }))}

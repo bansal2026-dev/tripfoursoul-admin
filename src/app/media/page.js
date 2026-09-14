@@ -7,15 +7,38 @@ import ConfirmActionModal from "@/components/ConfirmActionModal";
 import toast, { Toaster } from "react-hot-toast";
 
 export default function MediaPage() {
-  const [images, setImages] = useState([]);
+  const [mediaList, setMediaList] = useState([]);
+  const [totalImages, setTotalImages] = useState(0);
+  const [totalVideos, setTotalVideos] = useState(0);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [search, setSearch] = useState("");
-  const [selectedImage, setSelectedImage] = useState(null);
+  const [activeTab, setActiveTab] = useState("all"); // 'all' | 'image' | 'video'
+  const [selectedMedia, setSelectedMedia] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState("");
+  const [clientDims, setClientDims] = useState({});
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const fileInputRef = useRef(null);
+
+  // Check user role on mount
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.user?.role === "super_admin") {
+          setIsSuperAdmin(true);
+        }
+      })
+      .catch((err) => console.error("Error fetching user profile:", err));
+  }, []);
+
+  const getPixels = (item) => {
+    if (!item || item.mediaType === "video") return null;
+    if (item.width && item.height) return `${item.width} × ${item.height} px`;
+    return clientDims[item.url] || null;
+  };
 
   const fetchMedia = async () => {
     setLoading(true);
@@ -23,10 +46,13 @@ export default function MediaPage() {
       const res = await fetch("/api/media");
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to load media");
-      setImages(data.images || []);
+      const list = data.media || data.images || [];
+      setMediaList(list);
+      setTotalImages(data.totalImages || list.filter((m) => m.mediaType === "image").length);
+      setTotalVideos(data.totalVideos || list.filter((m) => m.mediaType === "video").length);
     } catch (err) {
-      console.error(err);
-      toast.error("Could not load media images");
+      console.error("Media load error:", err);
+      toast.error("Could not load media files");
     } finally {
       setLoading(false);
     }
@@ -36,15 +62,22 @@ export default function MediaPage() {
     fetchMedia();
   }, []);
 
-  const filteredImages = useMemo(() => {
-    if (!search.trim()) return images;
+  const filteredMedia = useMemo(() => {
+    let list = mediaList;
+    if (activeTab === "image") {
+      list = list.filter((m) => m.mediaType === "image");
+    } else if (activeTab === "video") {
+      list = list.filter((m) => m.mediaType === "video");
+    }
+
+    if (!search.trim()) return list;
     const q = search.toLowerCase();
-    return images.filter(
-      (img) =>
-        (img.name || "").toLowerCase().includes(q) ||
-        (img.url || "").toLowerCase().includes(q)
+    return list.filter(
+      (m) =>
+        (m.name || "").toLowerCase().includes(q) ||
+        (m.url || "").toLowerCase().includes(q)
     );
-  }, [images, search]);
+  }, [mediaList, activeTab, search]);
 
   const handleUpload = async (e) => {
     const files = e.target.files;
@@ -60,13 +93,16 @@ export default function MediaPage() {
           method: "POST",
           body: formData,
         });
-        if (res.ok) successCount += 1;
+        if (res.ok) {
+          successCount += 1;
+        } else {
+          const errData = await res.json();
+          toast.error(errData.error || `Failed to upload ${file.name}`);
+        }
       }
       if (successCount > 0) {
-        toast.success(`Uploaded ${successCount} image(s) successfully!`);
+        toast.success(`Uploaded ${successCount} file(s) successfully!`);
         await fetchMedia();
-      } else {
-        toast.error("Failed to upload image(s)");
       }
     } catch (err) {
       console.error(err);
@@ -80,12 +116,18 @@ export default function MediaPage() {
   const handleCopy = (url) => {
     navigator.clipboard.writeText(url);
     setCopiedUrl(url);
-    toast.success("Image URL copied to clipboard!");
+    toast.success("Media URL copied to clipboard!");
     setTimeout(() => setCopiedUrl(""), 2500);
   };
 
   const confirmDelete = async () => {
     if (!deleteTarget) return;
+    if (!isSuperAdmin) {
+      toast.error("Only Super Admin can delete files!");
+      setDeleteTarget(null);
+      return;
+    }
+
     setDeleting(true);
     try {
       const res = await fetch(`/api/media?url=${encodeURIComponent(deleteTarget.url)}`, {
@@ -93,8 +135,8 @@ export default function MediaPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Delete failed");
-      toast.success("Image removed from server!");
-      if (selectedImage?.url === deleteTarget.url) setSelectedImage(null);
+      toast.success("File deleted from server!");
+      if (selectedMedia?.url === deleteTarget.url) setSelectedMedia(null);
       await fetchMedia();
     } catch (err) {
       toast.error(err.message || "Failed to delete file");
@@ -122,11 +164,20 @@ export default function MediaPage() {
             <div className="flex items-center gap-2.5">
               <h1 className="text-2xl font-bold text-gray-900">Media Library</h1>
               <span className="rounded-full bg-teal-100 px-2.5 py-0.5 text-xs font-semibold text-teal-800">
-                {images.length} images
+                {mediaList.length} files
               </span>
+              {isSuperAdmin ? (
+                <span className="rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-semibold text-purple-800 flex items-center gap-1">
+                  🛡️ Super Admin
+                </span>
+              ) : (
+                <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600">
+                  Read Only (Delete restricted to Super Admin)
+                </span>
+              )}
             </div>
             <p className="mt-1 text-sm text-gray-500">
-              Browse, search, and manage all uploaded images across the website.
+              Browse, search, and manage images and videos across the website.
             </p>
           </div>
 
@@ -135,7 +186,7 @@ export default function MediaPage() {
               ref={fileInputRef}
               type="file"
               multiple
-              accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+              accept="image/jpeg,image/jpg,image/png,image/gif,image/webp,video/mp4,video/webm,video/ogg,video/quicktime"
               onChange={handleUpload}
               className="hidden"
               disabled={uploading}
@@ -149,14 +200,73 @@ export default function MediaPage() {
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
               </svg>
-              {uploading ? "Uploading..." : "+ Upload New Images"}
+              {uploading ? "Uploading..." : "+ Upload Media"}
             </button>
           </div>
         </div>
 
-        {/* Search & Actions Bar */}
-        <div className="admin-card mb-6 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-4">
-          <div className="relative flex-1 max-w-md">
+        {/* Filter Tabs & Search Bar */}
+        <div className="admin-card mb-6 flex flex-col gap-4 p-4">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+            {/* Tabs */}
+            <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl self-start">
+              <button
+                type="button"
+                onClick={() => setActiveTab("all")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  activeTab === "all"
+                    ? "bg-white text-gray-900 shadow-sm"
+                    : "text-gray-600 hover:text-gray-900"
+                }`}
+              >
+                All ({mediaList.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("image")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                  activeTab === "image"
+                    ? "bg-white text-gray-900 shadow-sm"
+                    : "text-gray-600 hover:text-gray-900"
+                }`}
+              >
+                <span>🖼️ Images</span>
+                <span className="rounded-full bg-gray-200 px-1.5 py-0.2 text-[10px] text-gray-700">
+                  {totalImages}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("video")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                  activeTab === "video"
+                    ? "bg-white text-gray-900 shadow-sm"
+                    : "text-gray-600 hover:text-gray-900"
+                }`}
+              >
+                <span>🎬 Videos</span>
+                <span className="rounded-full bg-purple-100 px-1.5 py-0.2 text-[10px] text-purple-700">
+                  {totalVideos}
+                </span>
+              </button>
+            </div>
+
+            {/* Refresh */}
+            <button
+              type="button"
+              onClick={fetchMedia}
+              disabled={loading}
+              className="admin-btn-secondary text-xs flex items-center gap-1.5 self-end sm:self-auto"
+            >
+              <svg className={`w-3.5 h-3.5 ${loading ? "animate-spin text-teal-600" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Refresh
+            </button>
+          </div>
+
+          {/* Search Input */}
+          <div className="relative w-full">
             <svg
               className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
               fill="none"
@@ -167,24 +277,12 @@ export default function MediaPage() {
             </svg>
             <input
               type="text"
-              placeholder="Search images by name or path..."
+              placeholder="Search files by name, type, or URL..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="admin-input pl-9 text-sm"
+              className="admin-input pl-9 text-sm w-full"
             />
           </div>
-
-          <button
-            type="button"
-            onClick={fetchMedia}
-            disabled={loading}
-            className="admin-btn-secondary text-xs flex items-center gap-1.5 self-end sm:self-auto"
-          >
-            <svg className={`w-3.5 h-3.5 ${loading ? "animate-spin text-teal-600" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            Refresh
-          </button>
         </div>
 
         {/* Main Grid */}
@@ -192,57 +290,100 @@ export default function MediaPage() {
           <div className="py-24 text-center">
             <LoadingSpinner text="Loading media files..." />
           </div>
-        ) : filteredImages.length === 0 ? (
+        ) : filteredMedia.length === 0 ? (
           <div className="admin-card py-16 text-center text-gray-400">
             <svg className="w-12 h-12 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
-            <p className="text-base font-semibold text-gray-700">No images found</p>
-            <p className="text-xs text-gray-400 mt-1">Upload images using the button above or clear the search query.</p>
+            <p className="text-base font-semibold text-gray-700">No media found</p>
+            <p className="text-xs text-gray-400 mt-1">
+              Upload images or videos using the button above or clear the search query.
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-            {filteredImages.map((img) => {
-              const isSelected = selectedImage?.url === img.url;
+            {filteredMedia.map((item) => {
+              const isSelected = selectedMedia?.url === item.url;
+              const isVideo = item.mediaType === "video";
+              const pixels = getPixels(item);
+
               return (
                 <div
-                  key={img.url}
-                  onClick={() => setSelectedImage(img)}
+                  key={item.url}
+                  onClick={() => setSelectedMedia(item)}
                   className={`group relative rounded-xl border overflow-hidden cursor-pointer bg-white transition-all flex flex-col ${
                     isSelected
                       ? "border-teal-600 ring-2 ring-teal-600/30 shadow-md"
                       : "border-gray-200 hover:border-teal-300 hover:shadow-sm"
                   }`}
                 >
-                  <div className="relative aspect-[4/3] w-full bg-gray-100 overflow-hidden">
-                    <img
-                      src={img.url}
-                      alt={img.name}
-                      loading="lazy"
-                      className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                    />
+                  {/* Thumbnail / Video Container */}
+                  <div className="relative aspect-[4/3] w-full bg-gray-900 overflow-hidden flex items-center justify-center">
+                    {isVideo ? (
+                      <div className="relative w-full h-full flex items-center justify-center bg-gray-950">
+                        <video
+                          src={item.url}
+                          preload="metadata"
+                          muted
+                          className="w-full h-full object-cover opacity-80"
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="w-10 h-10 rounded-full bg-black/60 backdrop-blur-xs flex items-center justify-center text-white border border-white/20 shadow-md">
+                            ▶
+                          </div>
+                        </div>
+                        <span className="absolute top-1.5 left-1.5 bg-purple-900/90 text-purple-200 text-[9px] font-bold px-1.5 py-0.5 rounded shadow">
+                          VIDEO
+                        </span>
+                      </div>
+                    ) : (
+                      <>
+                        <img
+                          src={item.url}
+                          alt={item.name}
+                          loading="lazy"
+                          onLoad={(e) => {
+                            const w = e.currentTarget.naturalWidth;
+                            const h = e.currentTarget.naturalHeight;
+                            if (w && h && (!item.width || !item.height)) {
+                              setClientDims((prev) => ({ ...prev, [item.url]: `${w} × ${h} px` }));
+                            }
+                          }}
+                          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        />
+                        {/* Pixel Badge Overlay */}
+                        {pixels && (
+                          <span className="absolute bottom-1.5 left-1.5 bg-black/75 text-white text-[9px] font-mono px-1.5 py-0.5 rounded shadow-sm backdrop-blur-xs pointer-events-none">
+                            {pixels}
+                          </span>
+                        )}
+                      </>
+                    )}
+
                     {/* Hover Actions */}
                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 p-2">
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleCopy(img.url);
+                          handleCopy(item.url);
                         }}
                         className="rounded-lg bg-white/90 p-1.5 text-gray-700 hover:bg-white text-xs font-semibold shadow"
                         title="Copy URL"
                       >
-                        {copiedUrl === img.url ? "✓" : "📋"}
+                        {copiedUrl === item.url ? "✓" : "📋"}
                       </button>
-                      {img.source === "upload" && (
+
+                      {/* Super Admin only Delete button */}
+                      {isSuperAdmin && item.source === "upload" && (
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setDeleteTarget(img);
+                            setDeleteTarget(item);
                           }}
                           className="rounded-lg bg-red-600/90 p-1.5 text-white hover:bg-red-700 text-xs shadow"
-                          title="Delete from server"
+                          title="Delete from server (Super Admin only)"
                         >
                           🗑️
                         </button>
@@ -250,13 +391,24 @@ export default function MediaPage() {
                     </div>
                   </div>
 
+                  {/* Card Meta Details */}
                   <div className="p-2.5 flex flex-col gap-0.5">
-                    <p className="text-xs font-medium text-gray-800 truncate" title={img.name || img.fileName}>
-                      {img.name || img.fileName}
+                    <p className="text-xs font-medium text-gray-800 truncate" title={item.name || item.fileName}>
+                      {item.name || item.fileName}
                     </p>
                     <div className="flex items-center justify-between text-[10px] text-gray-400">
-                      <span>{formatFileSize(img.size) || (img.source === "database" ? "DB Record" : "Upload")}</span>
-                      <span className="text-teal-600 font-medium">Click info</span>
+                      <span>{formatFileSize(item.size) || (item.source === "database" ? "DB Record" : "Upload")}</span>
+                      {isVideo ? (
+                        <span className="text-purple-600 font-semibold bg-purple-50 px-1 rounded border border-purple-200">
+                          Video
+                        </span>
+                      ) : pixels ? (
+                        <span className="text-teal-700 font-semibold bg-teal-50 px-1 rounded border border-teal-200">
+                          {pixels}
+                        </span>
+                      ) : (
+                        <span className="text-teal-600 font-medium">Image</span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -265,58 +417,109 @@ export default function MediaPage() {
           </div>
         )}
 
-        {/* Selected Image Details Modal / Bottom Bar */}
-        {selectedImage && (
-          <div className="fixed bottom-6 right-6 z-40 max-w-sm w-full bg-white rounded-2xl shadow-2xl border border-gray-200 p-4 animate-in slide-in-from-bottom duration-200">
+        {/* Selected Media Drawer / Floating Preview */}
+        {selectedMedia && (
+          <div className="fixed bottom-6 right-6 z-40 max-w-md w-full bg-white rounded-2xl shadow-2xl border border-gray-200 p-4 animate-in slide-in-from-bottom duration-200">
             <div className="flex items-start justify-between gap-2 mb-3">
-              <div className="flex items-center gap-3">
-                <img
-                  src={selectedImage.url}
-                  alt="Preview"
-                  className="w-14 h-14 rounded-lg object-cover border border-gray-200 shadow-sm"
-                />
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="relative w-16 h-16 rounded-lg overflow-hidden border border-gray-200 shadow-sm flex-shrink-0 bg-black flex items-center justify-center">
+                  {selectedMedia.mediaType === "video" ? (
+                    <video
+                      src={selectedMedia.url}
+                      className="w-full h-full object-cover"
+                      muted
+                    />
+                  ) : (
+                    <img
+                      src={selectedMedia.url}
+                      alt="Preview"
+                      className="w-full h-full object-cover"
+                    />
+                  )}
+                </div>
                 <div className="min-w-0">
-                  <p className="text-xs font-bold text-gray-900 truncate">
-                    {selectedImage.name || selectedImage.fileName}
+                  <p className="text-xs font-bold text-gray-900 truncate" title={selectedMedia.name || selectedMedia.fileName}>
+                    {selectedMedia.name || selectedMedia.fileName}
                   </p>
-                  <p className="text-[11px] text-gray-400">
-                    {formatFileSize(selectedImage.size) || "Database Reference"}
-                  </p>
+                  <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                    <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">
+                      {selectedMedia.mediaType || "file"}
+                    </span>
+                    {getPixels(selectedMedia) && (
+                      <span className="text-[10px] font-mono font-bold text-teal-800 bg-teal-50 border border-teal-200 px-1.5 py-0.5 rounded">
+                        {getPixels(selectedMedia)}
+                      </span>
+                    )}
+                    <span className="text-[11px] text-gray-400">
+                      {formatFileSize(selectedMedia.size) || "Database Reference"}
+                    </span>
+                  </div>
                 </div>
               </div>
               <button
                 type="button"
-                onClick={() => setSelectedImage(null)}
-                className="text-gray-400 hover:text-gray-600 text-xs"
+                onClick={() => setSelectedMedia(null)}
+                className="text-gray-400 hover:text-gray-600 text-sm p-1"
               >
                 ✕
               </button>
             </div>
 
+            {/* Video Player if video is selected */}
+            {selectedMedia.mediaType === "video" && (
+              <div className="mb-3 rounded-lg overflow-hidden border border-gray-200 bg-black">
+                <video
+                  src={selectedMedia.url}
+                  controls
+                  className="w-full max-h-48 object-contain"
+                />
+              </div>
+            )}
+
+            {/* URL Copy and Delete actions */}
             <div className="flex items-center gap-2 mt-2">
               <input
                 type="text"
                 readOnly
-                value={selectedImage.url}
-                className="admin-input py-1 text-xs font-mono flex-1 bg-gray-50"
+                value={selectedMedia.url}
+                className="admin-input py-1.5 text-xs font-mono flex-1 bg-gray-50"
               />
               <button
                 type="button"
-                onClick={() => handleCopy(selectedImage.url)}
-                className="admin-btn py-1 text-xs whitespace-nowrap"
+                onClick={() => handleCopy(selectedMedia.url)}
+                className="admin-btn py-1.5 text-xs whitespace-nowrap"
               >
-                {copiedUrl === selectedImage.url ? "Copied!" : "Copy URL"}
+                {copiedUrl === selectedMedia.url ? "Copied!" : "Copy URL"}
               </button>
+
+              {/* Super Admin Delete Button */}
+              {isSuperAdmin && selectedMedia.source === "upload" && (
+                <button
+                  type="button"
+                  onClick={() => setDeleteTarget(selectedMedia)}
+                  className="admin-btn-danger py-1.5 text-xs whitespace-nowrap"
+                  title="Super Admin Only"
+                >
+                  Delete
+                </button>
+              )}
             </div>
+
+            {!isSuperAdmin && selectedMedia.source === "upload" && (
+              <p className="mt-2 text-[10px] text-gray-400 text-right">
+                🔒 Only Super Admin can delete files from server
+              </p>
+            )}
           </div>
         )}
       </main>
 
+      {/* Confirmation Modal - strictly for Super Admin */}
       <ConfirmActionModal
         open={Boolean(deleteTarget)}
-        title="Delete Image from Server?"
-        description={`Are you sure you want to delete "${deleteTarget?.name || deleteTarget?.fileName}"? Any page or section using this image URL might break.`}
-        confirmLabel="Delete Image"
+        title="Delete Media File from Server?"
+        description={`Are you sure you want to delete "${deleteTarget?.name || deleteTarget?.fileName}"? Any website page or banner using this URL will no longer be able to display it.`}
+        confirmLabel="Delete File"
         danger
         loading={deleting}
         onConfirm={confirmDelete}
@@ -325,4 +528,3 @@ export default function MediaPage() {
     </div>
   );
 }
-

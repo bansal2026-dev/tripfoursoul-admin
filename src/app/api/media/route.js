@@ -1,52 +1,77 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
+import sharp from 'sharp';
 import db from '@/lib/db';
+import { getTokenFromCookies, verifyToken } from '@/lib/auth';
 
 const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.svg', '.avif']);
+const VIDEO_EXTENSIONS = new Set(['.mp4', '.webm', '.ogg', '.mov', '.m4v', '.mkv', '.avi']);
+const MEDIA_EXTENSIONS = new Set([...IMAGE_EXTENSIONS, ...VIDEO_EXTENSIONS]);
 
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const search = (searchParams.get('search') || '').trim().toLowerCase();
+    const typeFilter = (searchParams.get('type') || 'all').toLowerCase(); // 'all' | 'image' | 'video'
 
-    const imageMap = new Map(); // key: url, value: { url, name, size, date, source }
+    const mediaMap = new Map(); // key: url, value: { url, name, fileName, size, width, height, mediaType, date, timestamp, source }
 
-    // 1. Read files from public/uploads
+    // 1. Read files from public/uploads (both images and videos)
     const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
     if (fs.existsSync(uploadsDir)) {
       try {
         const fileNames = fs.readdirSync(uploadsDir);
-        for (const filename of fileNames) {
-          if (filename.startsWith('.')) continue;
+        await Promise.all(
+          fileNames.map(async (filename) => {
+            if (filename.startsWith('.')) return;
 
-          const ext = path.extname(filename).toLowerCase();
-          if (!IMAGE_EXTENSIONS.has(ext)) continue;
+            const ext = path.extname(filename).toLowerCase();
+            if (!MEDIA_EXTENSIONS.has(ext)) return;
 
-          const filePath = path.join(uploadsDir, filename);
-          const stats = fs.statSync(filePath);
+            const isVideo = VIDEO_EXTENSIONS.has(ext);
+            const mediaType = isVideo ? 'video' : 'image';
 
-          // Clean human-friendly name (strip leading timestamp prefix if present)
-          const cleanName = filename.replace(/^\d+[-_]?/, '');
+            const filePath = path.join(uploadsDir, filename);
+            const stats = fs.statSync(filePath);
 
-          const fileUrl = `/uploads/${filename}`;
-          imageMap.set(fileUrl, {
-            url: fileUrl,
-            name: cleanName || filename,
-            fileName: filename,
-            size: stats.size,
-            date: stats.mtime.toISOString(),
-            timestamp: stats.mtimeMs,
-            source: 'upload',
-          });
-        }
+            let width = null;
+            let height = null;
+            if (!isVideo) {
+              try {
+                const meta = await sharp(filePath).metadata();
+                width = meta.width || null;
+                height = meta.height || null;
+              } catch {
+                // Ignore metadata errors for non-standard image formats
+              }
+            }
+
+            // Clean human-friendly name (strip leading timestamp prefix if present from older files)
+            const cleanName = filename.replace(/^\d+[-_]/, '');
+
+            const fileUrl = `/uploads/${filename}`;
+            mediaMap.set(fileUrl, {
+              url: fileUrl,
+              name: cleanName || filename,
+              fileName: filename,
+              size: stats.size,
+              width,
+              height,
+              mediaType,
+              date: stats.mtime.toISOString(),
+              timestamp: stats.mtimeMs,
+              source: 'upload',
+            });
+          })
+        );
       } catch (dirErr) {
         console.warn('Error reading public/uploads:', dirErr.message);
       }
     }
 
-    // 2. Aggregate image URLs from database tables (page_banners, banner_images, destinations, packages, gallery)
-    const collectDbUrls = async (queryStr, urlFields) => {
+    // 2. Aggregate media URLs from database tables
+    const collectDbUrls = async (queryStr, urlFields, defaultType = null) => {
       try {
         const rows = await db.query(queryStr);
         if (Array.isArray(rows)) {
@@ -54,13 +79,20 @@ export async function GET(request) {
             for (const field of urlFields) {
               const val = row[field];
               if (val && typeof val === 'string' && (val.startsWith('/') || val.startsWith('http')) && !val.startsWith('data:')) {
-                if (!imageMap.has(val)) {
-                  const nameFromUrl = val.split('/').pop()?.split('?')[0] || 'Image';
-                  imageMap.set(val, {
+                if (!mediaMap.has(val)) {
+                  const ext = path.extname(val.split('?')[0]).toLowerCase();
+                  const isVideo = VIDEO_EXTENSIONS.has(ext) || field.includes('video') || val.includes('youtube') || val.includes('vimeo');
+                  const mediaType = defaultType || (isVideo ? 'video' : 'image');
+
+                  const nameFromUrl = val.split('/').pop()?.split('?')[0] || (mediaType === 'video' ? 'Video' : 'Image');
+                  mediaMap.set(val, {
                     url: val,
                     name: decodeURIComponent(nameFromUrl),
                     fileName: nameFromUrl,
                     size: null,
+                    width: null,
+                    height: null,
+                    mediaType,
                     date: row.created_at || row.updated_at || new Date().toISOString(),
                     timestamp: row.updated_at ? new Date(row.updated_at).getTime() : Date.now(),
                     source: 'database',
@@ -71,43 +103,68 @@ export async function GET(request) {
           }
         }
       } catch (err) {
-        // Table might not exist or be empty, safely ignore
+        // Safe to ignore if table doesn't exist
       }
     };
 
     await Promise.all([
-      collectDbUrls('SELECT background_image, updated_at FROM page_banners', ['background_image']),
-      collectDbUrls('SELECT image_url, created_at FROM banner_images', ['image_url']),
-      collectDbUrls('SELECT image_url, updated_at FROM destinations', ['image_url']),
-      collectDbUrls('SELECT image_url, updated_at FROM packages', ['image_url']),
-      collectDbUrls('SELECT image_url, created_at FROM gallery', ['image_url']),
+      collectDbUrls('SELECT background_image, updated_at FROM page_banners', ['background_image'], 'image'),
+      collectDbUrls('SELECT image_url, created_at FROM banner_images', ['image_url'], 'image'),
+      collectDbUrls('SELECT image_url, updated_at FROM destinations', ['image_url'], 'image'),
+      collectDbUrls('SELECT image_url, updated_at FROM packages', ['image_url'], 'image'),
+      collectDbUrls('SELECT image_url, video_url, created_at FROM gallery', ['image_url', 'video_url']),
+      collectDbUrls('SELECT image_url, video_url, influencer_video_url, created_at FROM testimonials', ['image_url', 'video_url', 'influencer_video_url']),
     ]);
 
     // 3. Convert to array and sort by most recent first
-    let images = Array.from(imageMap.values());
-    images.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    let media = Array.from(mediaMap.values());
+    media.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
-    // 4. Apply search filter if present
+    const totalImages = media.filter((m) => m.mediaType === 'image').length;
+    const totalVideos = media.filter((m) => m.mediaType === 'video').length;
+
+    // 4. Apply type filter
+    if (typeFilter === 'image' || typeFilter === 'images') {
+      media = media.filter((m) => m.mediaType === 'image');
+    } else if (typeFilter === 'video' || typeFilter === 'videos') {
+      media = media.filter((m) => m.mediaType === 'video');
+    }
+
+    // 5. Apply search filter
     if (search) {
-      images = images.filter((img) =>
-        (img.name || '').toLowerCase().includes(search) ||
-        (img.url || '').toLowerCase().includes(search)
+      media = media.filter((m) =>
+        (m.name || '').toLowerCase().includes(search) ||
+        (m.url || '').toLowerCase().includes(search)
       );
     }
 
     return NextResponse.json({
       success: true,
-      count: images.length,
-      images,
+      count: media.length,
+      totalImages,
+      totalVideos,
+      images: media, // Kept as 'images' for backwards compatibility, also contains videos
+      media,
     });
   } catch (error) {
-    console.error('Error fetching media images:', error);
-    return NextResponse.json({ error: 'Failed to fetch media images' }, { status: 500 });
+    console.error('Error fetching media:', error);
+    return NextResponse.json({ error: 'Failed to fetch media' }, { status: 500 });
   }
 }
 
 export async function DELETE(request) {
   try {
+    // STRICT SECURITY: Only Super Admin can delete media
+    const token = getTokenFromCookies(request);
+    const payload = verifyToken(token);
+
+    if (!payload || payload.role !== 'super_admin') {
+      return NextResponse.json(
+        { error: 'Permission denied: Only Super Admin can delete media files' },
+        { status: 403 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const filename = searchParams.get('filename') || '';
     const fileUrl = searchParams.get('url') || '';
@@ -128,7 +185,7 @@ export async function DELETE(request) {
 
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
-      return NextResponse.json({ success: true, message: 'Image deleted successfully' });
+      return NextResponse.json({ success: true, message: 'Media deleted successfully' });
     }
 
     return NextResponse.json({ error: 'File not found on server' }, { status: 404 });
@@ -137,4 +194,3 @@ export async function DELETE(request) {
     return NextResponse.json({ error: 'Failed to delete file' }, { status: 500 });
   }
 }
-

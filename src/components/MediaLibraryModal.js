@@ -15,6 +15,13 @@ export default function MediaLibraryModal({
   const [search, setSearch] = useState("");
   const [selectedImage, setSelectedImage] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [clientDims, setClientDims] = useState({});
+
+  const getPixels = (img) => {
+    if (!img) return null;
+    if (img.width && img.height) return `${img.width} × ${img.height} px`;
+    return clientDims[img.url] || null;
+  };
 
   const fetchMedia = async () => {
     setLoading(true);
@@ -229,8 +236,22 @@ export default function MediaLibraryModal({
                         src={img.url}
                         alt={img.name}
                         loading="lazy"
+                        onLoad={(e) => {
+                          const w = e.currentTarget.naturalWidth;
+                          const h = e.currentTarget.naturalHeight;
+                          if (w && h && (!img.width || !img.height)) {
+                            setClientDims((prev) => ({ ...prev, [img.url]: `${w} × ${h} px` }));
+                          }
+                        }}
                         className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                       />
+
+                      {/* Pixel Badge Overlay */}
+                      {getPixels(img) && (
+                        <span className="absolute bottom-1.5 left-1.5 bg-black/75 text-white text-[9px] font-mono px-1.5 py-0.5 rounded shadow-sm backdrop-blur-xs pointer-events-none">
+                          {getPixels(img)}
+                        </span>
+                      )}
 
                       {/* Selected Badge */}
                       {isSelected && (
@@ -252,9 +273,11 @@ export default function MediaLibraryModal({
                       </p>
                       <div className="flex items-center justify-between text-[10px] text-gray-400">
                         <span>{formatFileSize(img.size) || (img.source === "database" ? "DB Record" : "Upload")}</span>
-                        <span className="text-[10px] text-gray-300 group-hover:text-teal-600">
-                          {isSelected ? "Selected" : "Click to select"}
-                        </span>
+                        {getPixels(img) && (
+                          <span className="font-semibold text-teal-700 bg-teal-50 px-1 rounded border border-teal-200">
+                            {getPixels(img)}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -269,15 +292,24 @@ export default function MediaLibraryModal({
           <div className="flex items-center gap-3 min-w-0">
             {selectedImage ? (
               <>
-                <img
-                  src={selectedImage.url}
-                  alt="Preview"
-                  className="w-12 h-12 rounded-lg object-cover border border-gray-200 shadow-sm flex-shrink-0"
-                />
+                <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-gray-200 shadow-sm flex-shrink-0">
+                  <img
+                    src={selectedImage.url}
+                    alt="Preview"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
                 <div className="min-w-0">
-                  <p className="text-xs font-semibold text-gray-900 truncate">
-                    {selectedImage.name || selectedImage.fileName}
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-semibold text-gray-900 truncate">
+                      {selectedImage.name || selectedImage.fileName}
+                    </p>
+                    {getPixels(selectedImage) && (
+                      <span className="text-[10px] font-mono font-bold text-teal-800 bg-teal-50 border border-teal-200 px-1.5 py-0.5 rounded flex-shrink-0">
+                        {getPixels(selectedImage)}
+                      </span>
+                    )}
+                  </div>
                   <p className="text-[11px] text-gray-400 truncate max-w-md font-mono mt-0.5">
                     {selectedImage.url}
                   </p>

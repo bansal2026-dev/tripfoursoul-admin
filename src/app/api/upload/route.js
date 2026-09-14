@@ -1,31 +1,88 @@
 import { NextResponse } from 'next/server';
 import { mkdir, writeFile } from 'fs/promises';
+import fs from 'fs';
 import path from 'path';
-import { randomUUID } from 'crypto';
+import sharp from 'sharp';
 
-// Max file size (1 MB)
-const MAX_SIZE = 1024 * 1024;
+// Max file size (50 MB for videos/images)
+const MAX_SIZE = 50 * 1024 * 1024;
 
-// Allowed image types (WebP only)
-const ALLOWED_TYPES = ['image/webp'];
-const useBase64Images = process.env.NODE_ENV !== 'production';
+// Allowed image and video types
+const ALLOWED_TYPES = [
+  'image/webp',
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/gif',
+  'image/svg+xml',
+  'image/avif',
+  'video/mp4',
+  'video/webm',
+  'video/ogg',
+  'video/quicktime',
+  'video/x-matroska',
+  'video/m4v',
+];
 
-// Upload buffer to base64 data URL (stored directly in the database)
-const toBase64DataUrl = (buffer, mimeType) => {
-  return `data:${mimeType};base64,${buffer.toString('base64')}`;
-};
+// Sanitize filename while keeping the real human name
+function sanitizeBaseName(rawName) {
+  const rawExt = path.extname(rawName) || '.webp';
+  const rawBase = path.basename(rawName, rawExt);
 
-const saveProductionUpload = async (buffer) => {
+  let cleanBase = rawBase
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-zA-Z0-9_-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^[-_]+|[-_]+$/g, '');
+
+  if (!cleanBase) cleanBase = 'image';
+  const ext = rawExt.toLowerCase();
+
+  return { cleanBase, ext };
+}
+
+// Save uploaded buffer to public/uploads using real filename (handling duplicates safely)
+async function saveUploadWithRealName(buffer, originalFilename = 'image.webp') {
   const uploadsDirectory = path.join(process.cwd(), 'public', 'uploads');
-  const filename = `${Date.now()}-${randomUUID()}.webp`;
   await mkdir(uploadsDirectory, { recursive: true });
-  await writeFile(path.join(uploadsDirectory, filename), buffer);
-  return `/uploads/${filename}`;
-};
 
-const storedImageUrl = async (buffer, mimeType) => (
-  useBase64Images ? toBase64DataUrl(buffer, mimeType) : saveProductionUpload(buffer)
-);
+  const { cleanBase, ext } = sanitizeBaseName(originalFilename);
+  let targetFilename = `${cleanBase}${ext}`;
+  let counter = 1;
+
+  while (fs.existsSync(path.join(uploadsDirectory, targetFilename))) {
+    try {
+      const existingBuffer = fs.readFileSync(path.join(uploadsDirectory, targetFilename));
+      if (existingBuffer.equals(buffer)) {
+        // Exact identical image content already exists, reuse it
+        return targetFilename;
+      }
+    } catch {
+      // Ignore read error and try next
+    }
+    targetFilename = `${cleanBase}-${counter}${ext}`;
+    counter++;
+  }
+
+  await writeFile(path.join(uploadsDirectory, targetFilename), buffer);
+  return targetFilename;
+}
+
+// Extract pixel dimensions using sharp
+async function getImageDimensions(buffer) {
+  try {
+    const meta = await sharp(buffer).metadata();
+    return {
+      width: meta.width || null,
+      height: meta.height || null,
+      format: meta.format || null,
+    };
+  } catch (err) {
+    console.warn('Could not read image metadata with sharp:', err.message);
+    return { width: null, height: null, format: null };
+  }
+}
 
 export async function GET(request) {
   try {
@@ -40,7 +97,6 @@ export async function GET(request) {
     let imageBuffer;
     let contentType = 'image/jpeg';
 
-    // Fetch from URL (Cloudinary or external)
     if (imageUrl) {
       const response = await fetch(imageUrl);
       if (!response.ok) {
@@ -49,17 +105,10 @@ export async function GET(request) {
       const arrayBuffer = await response.arrayBuffer();
       imageBuffer = Buffer.from(arrayBuffer);
 
-      // Detect content type from URL
       if (imageUrl.endsWith('.png')) contentType = 'image/png';
       else if (imageUrl.endsWith('.gif')) contentType = 'image/gif';
       else if (imageUrl.endsWith('.webp')) contentType = 'image/webp';
-    }
-    // Read from local path
-    else if (imagePath) {
-      const fs = await import('fs');
-      const path = await import('path');
-
-      // Remove leading slash if present
+    } else if (imagePath) {
       const cleanPath = imagePath.startsWith('/') ? imagePath.slice(1) : imagePath;
       const fullPath = path.join(process.cwd(), 'public', cleanPath);
 
@@ -69,14 +118,12 @@ export async function GET(request) {
 
       imageBuffer = fs.readFileSync(fullPath);
 
-      // Detect content type from extension
       const ext = path.extname(fullPath).toLowerCase();
       if (ext === '.png') contentType = 'image/png';
       else if (ext === '.gif') contentType = 'image/gif';
       else if (ext === '.webp') contentType = 'image/webp';
     }
 
-    // Convert to base64
     const base64Image = imageBuffer.toString('base64');
     const dataUrl = `data:${contentType};base64,${base64Image}`;
 
@@ -98,33 +145,41 @@ export async function POST(request) {
     // ==================== Handle JSON body (base64 data URL) ====================
     if (reqContentType.includes('application/json')) {
       const body = await request.json();
-      const { base64Image } = body;
+      const { base64Image, fileName, name } = body;
 
       if (!base64Image) {
         return NextResponse.json({ error: 'No base64 image provided' }, { status: 400 });
       }
 
-      // Convert data URI to buffer for validation
-      const mimeMatch = base64Image.match(/^data:(image\/\w+);base64,/);
-      const detectedType = mimeMatch ? mimeMatch[1] : '';
-      const base64Data = base64Image.replace(/^data:image\/\w+;base64,/, '');
+      const mimeMatch = base64Image.match(/^data:(image\/[\w+]+);base64,/);
+      const detectedType = mimeMatch ? mimeMatch[1] : 'image/webp';
+      const base64Data = base64Image.replace(/^data:image\/[\w+]+;base64,/, '');
       const buffer = Buffer.from(base64Data, 'base64');
 
-      // Validate file type (WebP only)
       if (!ALLOWED_TYPES.includes(detectedType)) {
-        return NextResponse.json({ error: 'Invalid file type. Only WebP images are allowed.' }, { status: 400 });
+        return NextResponse.json({ error: 'Invalid file type. Allowed: WebP, JPEG, PNG, GIF, SVG.' }, { status: 400 });
       }
 
-      // Validate file size (max 1 MB)
       if (buffer.length > MAX_SIZE) {
-        return NextResponse.json({ error: 'File size too large. Maximum 1 MB allowed.' }, { status: 400 });
+        return NextResponse.json({ error: 'File size too large. Maximum 10 MB allowed.' }, { status: 400 });
       }
 
-      const imageUrl = await storedImageUrl(buffer, detectedType);
+      const originalName = fileName || name || `image.${detectedType.split('/')[1] || 'webp'}`;
+      const savedFilename = await saveUploadWithRealName(buffer, originalName);
+      const { width, height, format } = await getImageDimensions(buffer);
+
       return NextResponse.json({
         success: true,
-        imageUrl,
-        message: useBase64Images ? 'Image converted to base64 successfully' : 'Image uploaded successfully',
+        imageUrl: `/uploads/${savedFilename}`,
+        fileName: savedFilename,
+        realName: originalName,
+        width,
+        height,
+        format,
+        size: buffer.length,
+        message: width && height
+          ? `Image uploaded successfully (${width} × ${height} px)`
+          : 'Image uploaded successfully',
       });
     }
 
@@ -136,25 +191,33 @@ export async function POST(request) {
       return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
     }
 
-    // Validate file type
     if (!ALLOWED_TYPES.includes(file.type)) {
-      return NextResponse.json({ error: 'Invalid file type. Only WebP images are allowed.' }, { status: 400 });
+      return NextResponse.json({ error: 'Invalid file type. Allowed: WebP, JPEG, PNG, GIF, SVG.' }, { status: 400 });
     }
 
-    // Validate file size (max 1 MB)
     if (file.size > MAX_SIZE) {
-      return NextResponse.json({ error: 'File size too large. Maximum 1 MB allowed.' }, { status: 400 });
+      return NextResponse.json({ error: 'File size too large. Maximum 10 MB allowed.' }, { status: 400 });
     }
 
-    // Convert file to buffer
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    const imageUrl = await storedImageUrl(buffer, file.type);
+    // Save with its REAL original filename
+    const savedFilename = await saveUploadWithRealName(buffer, file.name || 'image.webp');
+    const { width, height, format } = await getImageDimensions(buffer);
+
     return NextResponse.json({
       success: true,
-      imageUrl,
-      message: useBase64Images ? 'Image converted to base64 successfully' : 'Image uploaded successfully',
+      imageUrl: `/uploads/${savedFilename}`,
+      fileName: savedFilename,
+      realName: file.name || savedFilename,
+      width,
+      height,
+      format,
+      size: buffer.length,
+      message: width && height
+        ? `Image uploaded successfully (${width} × ${height} px)`
+        : 'Image uploaded successfully',
     });
   } catch (error) {
     console.error('Upload error:', error);

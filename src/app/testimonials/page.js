@@ -227,10 +227,8 @@ export default function TestimonialsPage() {
                     </button>
                   </div>
                   {form.image_url && (
-                    <div className="mt-2">
                     <div className="mt-2 flex items-center gap-2">
                       <img src={form.image_url} alt="Preview" className="w-16 h-16 object-cover rounded-full border border-gray-200" />
-                      <p className="text-xs text-gray-500 mt-1">Image uploaded</p>
                       <button
                         type="button"
                         onClick={() => setForm((prev) => ({ ...prev, image_url: "" }))}

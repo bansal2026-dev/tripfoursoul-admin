@@ -28,6 +28,7 @@ export default function EditPageBannerPage() {
   const [showMediaLibrary, setShowMediaLibrary] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [bannerId, setBannerId] = useState(null);
+  const [bannerDims, setBannerDims] = useState(null);
   const [message, setMessage] = useStatusToast();
 
   useEffect(() => {
@@ -82,7 +83,7 @@ export default function EditPageBannerPage() {
       const data = await res.json();
       if (res.ok && data.imageUrl) {
         setForm((prev) => ({ ...prev, background_image: data.imageUrl }));
-        setMessage("Image uploaded successfully!");
+        setMessage(data.message || "Image uploaded successfully!");
       } else {
         setMessage(data.error || "Failed to upload image");
       }
@@ -239,11 +240,24 @@ export default function EditPageBannerPage() {
                         src={form.background_image}
                         alt="Banner Preview"
                         className="w-full h-52 object-cover"
+                        onLoad={(e) => {
+                          const w = e.currentTarget.naturalWidth;
+                          const h = e.currentTarget.naturalHeight;
+                          if (w && h) setBannerDims(`${w} × ${h} px`);
+                        }}
                       />
+                      {bannerDims && (
+                        <span className="absolute bottom-2 left-2 bg-black/75 text-white text-[11px] font-mono px-2 py-0.5 rounded shadow backdrop-blur-xs pointer-events-none">
+                          {bannerDims}
+                        </span>
+                      )}
                       <div className="absolute top-2 right-2">
                         <button
                           type="button"
-                          onClick={() => setForm((prev) => ({ ...prev, background_image: "" }))}
+                          onClick={() => {
+                            setForm((prev) => ({ ...prev, background_image: "" }));
+                            setBannerDims(null);
+                          }}
                           className="rounded-full bg-red-600 p-1.5 text-white hover:bg-red-700 shadow"
                           title="Remove Image"
                         >

@@ -158,7 +158,6 @@ export default function AboutPage() {
         />
       </div>
       {data[field] && (
-        <div className="mt-2">
         <div className="mt-2 flex items-center gap-3">
           <img src={data[field]} alt={label} className="w-48 h-32 object-cover rounded-lg border border-gray-200" />
           <button
