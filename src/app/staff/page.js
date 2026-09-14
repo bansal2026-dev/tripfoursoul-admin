@@ -7,7 +7,6 @@ import Pagination, { usePagination } from "@/components/Pagination";
 import useStatusToast from "@/hooks/useStatusToast";
 
 const PERMISSION_OPTIONS = [
-  { value: "dashboard", label: "Dashboard" },
   { value: "banner", label: "Banner" },
   { value: "offers", label: "Offers" },
   { value: "trending", label: "Trending" },
