@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import Sidebar from "@/components/Sidebar";
 import useStatusToast from "@/hooks/useStatusToast";
+import MediaLibraryModal from "@/components/MediaLibraryModal";
 
 export default function AboutPage() {
   const [data, setData] = useState({
@@ -47,6 +48,7 @@ export default function AboutPage() {
   const [activeTab, setActiveTab] = useState("hero");
   const fileInputRef = useRef(null);
   const [uploadField, setUploadField] = useState("image_url");
+  const [showMediaLibrary, setShowMediaLibrary] = useState(false);
 
   useEffect(() => { fetchData(); }, []);
 
@@ -135,6 +137,18 @@ export default function AboutPage() {
         >
           {uploading && uploadField === field ? "Uploading..." : "Upload Image"}
         </button>
+        <button
+          type="button"
+          onClick={() => { setUploadField(field); setShowMediaLibrary(true); }}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-teal-800 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100 transition-colors whitespace-nowrap shadow-sm"
+          disabled={uploading}
+          title="Choose an existing image from uploaded library"
+        >
+          <svg className="w-3.5 h-3.5 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          Choose from Uploaded
+        </button>
         <input
           type="text"
           value={data[field] || ""}
@@ -145,7 +159,15 @@ export default function AboutPage() {
       </div>
       {data[field] && (
         <div className="mt-2">
+        <div className="mt-2 flex items-center gap-3">
           <img src={data[field]} alt={label} className="w-48 h-32 object-cover rounded-lg border border-gray-200" />
+          <button
+            type="button"
+            onClick={() => setData({ ...data, [field]: "" })}
+            className="admin-btn-danger text-xs whitespace-nowrap"
+          >
+            Remove Image
+          </button>
         </div>
       )}
     </div>
@@ -386,6 +408,17 @@ export default function AboutPage() {
           </div>
         </div>
       </main>
+
+      <MediaLibraryModal
+        isOpen={showMediaLibrary}
+        onClose={() => setShowMediaLibrary(false)}
+        onSelectImage={(url) => {
+          setData((prev) => ({ ...prev, [uploadField]: url }));
+          setMessage("Image selected from library!");
+          setTimeout(() => setMessage(""), 3000);
+        }}
+        currentImageUrl={data[uploadField]}
+      />
     </div>
   );
 }

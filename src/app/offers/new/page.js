@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
+import MediaLibraryModal from "@/components/MediaLibraryModal";
 import useStatusToast from "@/hooks/useStatusToast";
 
 const emptyOffer = { title: "", description: "", image_url: "", button_text: "View offer", button_link: "/contact", badge: "", coupon_code: "", travel_start_date: "", travel_end_date: "", duration_days: "", duration: "", publish_duration_days: "", sort_order: 0, is_active: false };
@@ -15,6 +16,7 @@ export default function NewOfferPage() {
   const [linkType, setLinkType] = useState("/contact");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [showMediaLibrary, setShowMediaLibrary] = useState(false);
   const [message, setMessage] = useStatusToast();
   const inputRef = useRef(null);
 
@@ -176,6 +178,18 @@ export default function NewOfferPage() {
             <span className="admin-label">Offer image</span>
             <div className="flex flex-wrap gap-3">
               <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={uploadImage} className="admin-input max-w-md" disabled={uploading} />
+              <button
+                type="button"
+                onClick={() => setShowMediaLibrary(true)}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-teal-800 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100 transition-colors whitespace-nowrap shadow-sm"
+                disabled={uploading}
+                title="Choose an existing image from uploaded library"
+              >
+                <svg className="w-3.5 h-3.5 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                Choose from Uploaded
+              </button>
               <input value={form.image_url} onChange={(e) => update("image_url", e.target.value)} className="admin-input max-w-md" placeholder="Or paste image URL" />
             </div>
             {form.image_url && <img src={form.image_url} alt="Offer preview" className="mt-3 h-28 w-44 rounded-lg object-cover" />}
@@ -186,6 +200,16 @@ export default function NewOfferPage() {
           </div>
         </form>
       </main>
+
+      <MediaLibraryModal
+        isOpen={showMediaLibrary}
+        onClose={() => setShowMediaLibrary(false)}
+        onSelectImage={(url) => {
+          update("image_url", url);
+          notify("Offer image selected from library!");
+        }}
+        currentImageUrl={form.image_url}
+      />
     </div>
   );
 }

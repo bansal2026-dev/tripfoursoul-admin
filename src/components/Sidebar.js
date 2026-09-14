@@ -37,6 +37,7 @@ const allMenuItems = [
   { href: "/services", label: "Services", icon: Layers, permission: "services" },
   { href: "/page-banners", label: "Page Banners", icon: Image, permission: "page-banners" },
   { href: "/gallery", label: "Gallery", icon: Image, permission: "gallery" },
+  { href: "/media", label: "Media Library", icon: Image, permission: null },
   // { href: "/team-members", label: "Team Members", icon: Star, permission: "team-members" },
   { href: "/blog", label: "Blog", icon: Layers, permission: "blog" },
   { href: "/blog-categories", label: "Blog Categories", icon: Tag, permission: "blog" },

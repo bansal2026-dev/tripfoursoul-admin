@@ -106,3 +106,35 @@ export async function GET(request) {
   }
 }
 
+export async function DELETE(request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const filename = searchParams.get('filename') || '';
+    const fileUrl = searchParams.get('url') || '';
+
+    let targetFilename = filename;
+    if (!targetFilename && fileUrl.startsWith('/uploads/')) {
+      targetFilename = fileUrl.replace(/^\/uploads\//, '');
+    }
+
+    if (!targetFilename) {
+      return NextResponse.json({ error: 'Filename or URL is required' }, { status: 400 });
+    }
+
+    // Sanitize filename to prevent directory traversal
+    const safeFilename = path.basename(targetFilename);
+    const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
+    const filePath = path.join(uploadsDir, safeFilename);
+
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      return NextResponse.json({ success: true, message: 'Image deleted successfully' });
+    }
+
+    return NextResponse.json({ error: 'File not found on server' }, { status: 404 });
+  } catch (error) {
+    console.error('Error deleting media file:', error);
+    return NextResponse.json({ error: 'Failed to delete file' }, { status: 500 });
+  }
+}
+

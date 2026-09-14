@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import Sidebar from "@/components/Sidebar";
+import MediaLibraryModal from "@/components/MediaLibraryModal";
 
 const emptyForm = { name: "", slug: "", description: "", image_url: "", sort_order: 0, is_active: true };
 
@@ -13,6 +14,7 @@ export default function NewBlogCategoryPage() {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [showMediaLibrary, setShowMediaLibrary] = useState(false);
 
   useEffect(() => {
     fetch("/api/sort-order?table=blog_categories")
@@ -101,6 +103,18 @@ export default function NewBlogCategoryPage() {
               <div className="flex gap-2">
                 <input ref={fileInputRef} type="file" accept="image/jpeg,image/jpg,image/png,image/gif,image/webp" onChange={handleImageUpload} className="admin-input flex-1" disabled={uploading} />
                 <button type="button" onClick={() => fileInputRef.current?.click()} className="admin-btn-secondary whitespace-nowrap text-xs" disabled={uploading}>{uploading ? "Uploading..." : "Upload Image"}</button>
+                <button
+                  type="button"
+                  onClick={() => setShowMediaLibrary(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-teal-800 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100 transition-colors whitespace-nowrap shadow-sm"
+                  disabled={uploading}
+                  title="Choose an existing image from uploaded library"
+                >
+                  <svg className="w-3.5 h-3.5 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  Choose from Uploaded
+                </button>
               </div>
               {form.image_url && (
                 <div className="mt-3 flex items-start gap-3">
@@ -121,6 +135,16 @@ export default function NewBlogCategoryPage() {
           <button type="button" onClick={handleSave} disabled={saving} className="admin-btn">{saving ? "Saving..." : "Create Category"}</button>
         </div>
       </main>
+
+      <MediaLibraryModal
+        isOpen={showMediaLibrary}
+        onClose={() => setShowMediaLibrary(false)}
+        onSelectImage={(url) => {
+          setForm((prev) => ({ ...prev, image_url: url }));
+          toast.success("Image selected from library!");
+        }}
+        currentImageUrl={form.image_url}
+      />
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import Sidebar from "@/components/Sidebar";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import MediaLibraryModal from "@/components/MediaLibraryModal";
 import useStatusToast from "@/hooks/useStatusToast";
 
 export default function BannerPage() {
@@ -19,6 +20,7 @@ export default function BannerPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useStatusToast();
   const [uploading, setUploading] = useState(false);
+  const [showMediaLibrary, setShowMediaLibrary] = useState(false);
   const fileInputRef = useRef(null);
 
   const fetchBannerData = async () => {
@@ -253,6 +255,35 @@ export default function BannerPage() {
                 {uploading ? "Uploading..." : "Upload from System"}
               </button>
             </div>
+              <div className="flex gap-3">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+                  onChange={handleFileUpload}
+                  className="admin-input flex-1"
+                  disabled={uploading}
+                />
+                <button 
+                  onClick={() => fileInputRef.current?.click()} 
+                  className="admin-btn whitespace-nowrap"
+                  disabled={uploading}
+                >
+                  {uploading ? "Uploading..." : "Upload from System"}
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setShowMediaLibrary(true)} 
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-teal-800 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100 transition-colors whitespace-nowrap shadow-sm"
+                  disabled={uploading}
+                  title="Choose an existing image from uploaded library"
+                >
+                  <svg className="w-3.5 h-3.5 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  Choose from Uploaded
+                </button>
+              </div>
 
             {/* URL Input */}
             <div className="flex gap-3">
@@ -303,6 +334,19 @@ export default function BannerPage() {
           </div>
         </div>
       </main>
+
+      <MediaLibraryModal
+        isOpen={showMediaLibrary}
+        onClose={() => setShowMediaLibrary(false)}
+        onSelectImage={(url) => {
+          setImages((prev) => [
+            ...prev,
+            { id: "temp-" + Date.now(), image_url: url, isNew: true },
+          ]);
+          setMessage("Image selected from library! Click 'Save Banner Settings' below to save changes.");
+          setTimeout(() => setMessage(""), 4000);
+        }}
+      />
     </div>
   );
 }

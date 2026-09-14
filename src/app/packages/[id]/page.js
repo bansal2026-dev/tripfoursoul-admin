@@ -6,6 +6,7 @@ import Sidebar from "@/components/Sidebar";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import RichTextEditor from "@/components/RichTextEditor";
 import DayWiseItineraryEditor from "@/components/DayWiseItineraryEditor";
+import MediaLibraryModal from "@/components/MediaLibraryModal";
 import { CURRENCIES, buildPricePayload, priceFromRecord } from "@/lib/price";
 import useStatusToast from "@/hooks/useStatusToast";
 import useDirtyForm from "@/hooks/useDirtyForm";
@@ -29,6 +30,7 @@ export default function EditPackagePage() {
   const [message, setMessage] = useStatusToast();
   const [messageType, setMessageType] = useState("error");
   const [uploading, setUploading] = useState(false);
+  const [showMediaLibrary, setShowMediaLibrary] = useState(false);
   const fileInputRef = useRef(null);
 
   // Destination modal state
@@ -482,6 +484,18 @@ export default function EditPackagePage() {
                 >
                   {uploading ? "Uploading..." : "Upload"}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setShowMediaLibrary(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-teal-800 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100 transition-colors whitespace-nowrap shadow-sm"
+                  disabled={form.gallery_images.length >= MAX_PACKAGE_IMAGES}
+                  title="Choose an existing image from uploaded library"
+                >
+                  <svg className="w-3.5 h-3.5 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  Choose from Uploaded
+                </button>
               </div>
               <p className="mt-1 text-xs text-gray-500">
                 Upload up to {MAX_PACKAGE_IMAGES} WebP images, max 1 MB each. Click &quot;Set as Cover&quot; on any image to choose your cover photo. Cover photo will only show on cards; other images will show inside the package page. ({form.gallery_images.length}/{MAX_PACKAGE_IMAGES})
@@ -651,6 +665,24 @@ export default function EditPackagePage() {
           </div>
         </div>
       )}
+
+      <MediaLibraryModal
+        isOpen={showMediaLibrary}
+        onClose={() => setShowMediaLibrary(false)}
+        onSelectImage={(url) => {
+          if (form.gallery_images.includes(url)) {
+            notify("Image is already added to package gallery", "error");
+            return;
+          }
+          setForm((c) => ({
+            ...c,
+            image_url: c.image_url || url,
+            gallery_images: [...c.gallery_images, url],
+          }));
+          notify("Image selected from library!", "success");
+        }}
+        currentImageUrl={form.image_url}
+      />
     </div>
   );
 }

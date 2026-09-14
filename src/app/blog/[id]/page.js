@@ -6,6 +6,7 @@ import toast from "react-hot-toast";
 import Sidebar from "@/components/Sidebar";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import RichTextEditor from "@/components/RichTextEditor";
+import MediaLibraryModal from "@/components/MediaLibraryModal";
 import BlogContentManager, { contentBlocksToHtml, createInitialContentBlocks, htmlToContentBlocks } from "@/components/BlogContentManager";
 
 const MAX_IMAGE_SIZE = 1024 * 1024;
@@ -23,6 +24,7 @@ export default function EditBlogPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [showMediaLibrary, setShowMediaLibrary] = useState(false);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -198,6 +200,18 @@ export default function EditBlogPage() {
                 <button type="button" onClick={() => fileInputRef.current?.click()} className="admin-btn-secondary text-xs whitespace-nowrap" disabled={uploading || form.gallery_images.length >= 3}>
                   {uploading ? "Uploading..." : "Upload"}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setShowMediaLibrary(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-teal-800 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100 transition-colors whitespace-nowrap shadow-sm"
+                  disabled={uploading || form.gallery_images.length >= 3}
+                  title="Choose an existing image from uploaded library"
+                >
+                  <svg className="w-3.5 h-3.5 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  Choose from Uploaded
+                </button>
               </div>
               <p className="text-xs text-gray-500 mt-1">Upload up to 3 WebP images, max 1 MB each. The first image becomes the cover. ({form.gallery_images.length}/3)</p>
               {form.gallery_images.length > 0 && (
@@ -235,6 +249,27 @@ export default function EditBlogPage() {
           </div>
         </div>
       </main>
+
+      <MediaLibraryModal
+        isOpen={showMediaLibrary}
+        onClose={() => setShowMediaLibrary(false)}
+        onSelectImage={(url) => {
+          if (form.gallery_images.includes(url)) {
+            toast.error("Image is already added");
+            return;
+          }
+          setForm((prev) => {
+            const gallery_images = [...prev.gallery_images, url];
+            return {
+              ...prev,
+              gallery_images,
+              cover_image: prev.cover_image || url,
+            };
+          });
+          toast.success("Image selected from library!");
+        }}
+        currentImageUrl={form.cover_image}
+      />
     </div>
   );
 }

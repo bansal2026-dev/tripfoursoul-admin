@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import RichTextEditor from "@/components/RichTextEditor";
+import MediaLibraryModal from "@/components/MediaLibraryModal";
 
 let blockSequence = 0;
 
@@ -62,6 +63,7 @@ export const htmlToContentBlocks = (html) => {
 export default function BlogContentManager({ blocks, onChange }) {
   const imageInputRefs = useRef({});
   const [uploadingBlockId, setUploadingBlockId] = useState("");
+  const [mediaModalBlockId, setMediaModalBlockId] = useState(null);
   const [error, setError] = useState("");
 
   const updateBlock = (id, changes) => onChange(blocks.map((block) => (
@@ -156,6 +158,18 @@ export default function BlogContentManager({ blocks, onChange }) {
                 <button type="button" onClick={() => imageInputRefs.current[block.id]?.click()} disabled={uploadingBlockId === block.id} className="admin-btn-secondary">
                   {uploadingBlockId === block.id ? "Uploading..." : block.imageUrl ? "Replace Image" : "Upload Image"}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setMediaModalBlockId(block.id)}
+                  disabled={uploadingBlockId === block.id}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-teal-800 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100 transition-colors whitespace-nowrap shadow-sm"
+                  title="Choose an existing image from uploaded library"
+                >
+                  <svg className="w-3.5 h-3.5 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  Choose from Uploaded
+                </button>
                 {block.imageUrl && <button type="button" onClick={() => updateBlock(block.id, { imageUrl: "" })} className="admin-btn-danger">Remove Image</button>}
               </div>
               <div>
@@ -167,6 +181,18 @@ export default function BlogContentManager({ blocks, onChange }) {
         </div>
       ))}
       {error && <p className="text-sm text-red-600">{error}</p>}
+
+      <MediaLibraryModal
+        isOpen={Boolean(mediaModalBlockId)}
+        onClose={() => setMediaModalBlockId(null)}
+        onSelectImage={(url) => {
+          if (mediaModalBlockId) {
+            updateBlock(mediaModalBlockId, { imageUrl: url });
+            setMediaModalBlockId(null);
+          }
+        }}
+        currentImageUrl={blocks.find((b) => b.id === mediaModalBlockId)?.imageUrl}
+      />
     </div>
   );
 }

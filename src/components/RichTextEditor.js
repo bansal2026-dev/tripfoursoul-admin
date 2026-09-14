@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useEffect } from "react";
+import MediaLibraryModal from "@/components/MediaLibraryModal";
 
 const ToolbarButton = ({ onClick, active, title, children }) => (
   <button
@@ -161,6 +162,20 @@ export default function RichTextEditor({ value, onChange, placeholder, rows = 6,
   const [activeFormats, setActiveFormats] = useState({});
   const [uploadingImage, setUploadingImage] = useState(false);
   const [imageError, setImageError] = useState("");
+  const [showMediaLibrary, setShowMediaLibrary] = useState(false);
+
+  const handleSelectMediaImage = (url) => {
+    editorRef.current?.focus();
+    restoreSelection();
+    const safeAlt = url.split("/").pop().replace(/\.[^/.]+$/, "").replace(/"/g, "") || "Image";
+    document.execCommand(
+      "insertHTML",
+      false,
+      `<figure style="margin: 20px 0;"><img src="${url}" alt="${safeAlt}" style="width: 100%; height: auto; border-radius: 8px;" /><figcaption style="margin-top: 6px; font-size: 12px; color: #6b7280;">Add image caption</figcaption></figure><p><br></p>`
+    );
+    handleInput();
+    setShowMediaLibrary(false);
+  };
 
   // Sync external value changes (e.g., when switching between edit/add modes).
   // Inline list margins from pasted (Google Docs) content are normalized so old
@@ -330,6 +345,9 @@ export default function RichTextEditor({ value, onChange, placeholder, rows = 6,
             <ToolbarButton onClick={() => imageInputRef.current?.click()} title="Insert Image">
               {uploadingImage ? "Uploading…" : "▧ Image"}
             </ToolbarButton>
+            <ToolbarButton onClick={() => setShowMediaLibrary(true)} title="Choose Image from Uploaded Library">
+              🖼 Library
+            </ToolbarButton>
             <input
               ref={imageInputRef}
               type="file"
@@ -401,6 +419,12 @@ export default function RichTextEditor({ value, onChange, placeholder, rows = 6,
           </div>
         </div>
       )}
+
+      <MediaLibraryModal
+        isOpen={showMediaLibrary}
+        onClose={() => setShowMediaLibrary(false)}
+        onSelectImage={handleSelectMediaImage}
+      />
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import useStatusToast from "@/hooks/useStatusToast";
 import RichTextEditor from "@/components/RichTextEditor";
+import MediaLibraryModal from "@/components/MediaLibraryModal";
 
 const TABS = [
   { id: "banner", label: "Banner" },
@@ -58,6 +59,27 @@ function HomepageSettingsPageContent() {
   // About section image state
   const [aboutUploading, setAboutUploading] = useState(false);
   const aboutFileInputRef = useRef(null);
+
+  // Media Library Modal state
+  const [showMediaLibrary, setShowMediaLibrary] = useState(false);
+  const [mediaTarget, setMediaTarget] = useState(null); // 'banner' | 'about' | 'testimonial'
+
+  const handleSelectMediaImage = (url) => {
+    if (mediaTarget === "banner") {
+      setBannerImages((prev) => [
+        ...prev,
+        { id: "temp-" + Date.now(), image_url: url, isNew: true },
+      ]);
+      showMessage("Image selected! Click 'Save Banner Images' to save to database.", "success");
+    } else if (mediaTarget === "about") {
+      updateAboutField("image_url", url);
+      showMessage("About image selected! Click 'Save About Settings' below to save to database.", "success");
+    } else if (mediaTarget === "testimonial") {
+      setTestimonialForm((prev) => ({ ...prev, image_url: url }));
+      showMessage("Image selected from library!", "success");
+    }
+    setShowMediaLibrary(false);
+  };
 
   const showMessage = (msg, type = "success") => {
     setMessage(msg);
@@ -584,6 +606,18 @@ function HomepageSettingsPageContent() {
                   >
                     {bannerUploading ? "Uploading..." : "Upload from System"}
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => { setMediaTarget("banner"); setShowMediaLibrary(true); }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-teal-800 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100 transition-colors whitespace-nowrap shadow-sm"
+                    disabled={bannerUploading}
+                    title="Choose an existing image from uploaded library"
+                  >
+                    <svg className="w-3.5 h-3.5 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    Choose from Uploaded
+                  </button>
                 </div>
 
                 <div className="flex gap-3">
@@ -667,6 +701,18 @@ function HomepageSettingsPageContent() {
                     >
                       {aboutUploading ? "Uploading..." : "Upload Image"}
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => { setMediaTarget("about"); setShowMediaLibrary(true); }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-teal-800 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100 transition-colors whitespace-nowrap shadow-sm"
+                      disabled={aboutUploading}
+                      title="Choose an existing image from uploaded library"
+                    >
+                      <svg className="w-3.5 h-3.5 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      Choose from Uploaded
+                    </button>
                     <input
                       ref={aboutFileInputRef}
                       type="file"
@@ -685,7 +731,15 @@ function HomepageSettingsPageContent() {
                   </div>
                   {data.about.about.image_url ? (
                     <div className="mt-2">
+                    <div className="mt-2 flex items-center gap-3">
                       <img src={data.about.about.image_url} alt="About section" className="w-48 h-32 object-cover rounded-lg border border-gray-200" />
+                      <button
+                        type="button"
+                        onClick={() => updateAboutField("image_url", "")}
+                        className="admin-btn-danger text-xs whitespace-nowrap"
+                      >
+                        Remove Image
+                      </button>
                     </div>
                   ) : (
                     <p className="mt-1 text-xs text-gray-500">Upload an image to show on the homepage About Us section.</p>
@@ -891,11 +945,31 @@ function HomepageSettingsPageContent() {
                       >
                         {uploading ? "Uploading..." : "Upload"}
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => { setMediaTarget("testimonial"); setShowMediaLibrary(true); }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-teal-800 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100 transition-colors whitespace-nowrap shadow-sm"
+                        disabled={uploading}
+                        title="Choose an existing image from uploaded library"
+                      >
+                        <svg className="w-3.5 h-3.5 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        Choose from Uploaded
+                      </button>
                     </div>
                     {testimonialForm.image_url && (
                       <div className="mt-2">
+                      <div className="mt-2 flex items-center gap-2">
                         <img src={testimonialForm.image_url} alt="Preview" className="w-16 h-16 object-cover rounded-full border border-gray-200" />
                         <p className="text-xs text-gray-500 mt-1">Image uploaded</p>
+                        <button
+                          type="button"
+                          onClick={() => setTestimonialForm((prev) => ({ ...prev, image_url: "" }))}
+                          className="admin-btn-danger text-xs whitespace-nowrap"
+                        >
+                          Remove
+                        </button>
                       </div>
                     )}
                   </div>
@@ -1108,6 +1182,15 @@ function HomepageSettingsPageContent() {
           </div>
         )}
       </main>
+
+      <MediaLibraryModal
+        isOpen={showMediaLibrary}
+        onClose={() => {
+          setShowMediaLibrary(false);
+          setMediaTarget(null);
+        }}
+        onSelectImage={handleSelectMediaImage}
+      />
     </div>
   );
 }
