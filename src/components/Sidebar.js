@@ -25,6 +25,7 @@ import {
 
 const allMenuItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, permission: "dashboard" },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, permission: null },
   { href: "/homepage", label: "Homepage Settings", icon: Settings, permission: "homepage" },
   { href: "/offers", label: "Offers", icon: Tag, permission: "offers" },
   { href: "/leads", label: "Leads", icon: Inbox, permission: "leads" },

@@ -23,6 +23,18 @@ export async function GET(request) {
       // The signed token remains sufficient if the database is temporarily unavailable.
     }
 
+    const userRole = account?.role || payload.role || 'admin';
+    let userPermissions = account?.permissions ?? payload.permissions ?? null;
+    if (typeof userPermissions === 'string') {
+      try { userPermissions = JSON.parse(userPermissions); } catch { userPermissions = []; }
+    }
+    if (userRole === 'staff') {
+      if (!Array.isArray(userPermissions)) userPermissions = [];
+      if (!userPermissions.includes('dashboard')) userPermissions.unshift('dashboard');
+    } else if (userRole === 'admin' || userRole === 'super_admin') {
+      userPermissions = null;
+    }
+
     return NextResponse.json({
       user: {
         id: account?.id || payload.id,
@@ -30,6 +42,8 @@ export async function GET(request) {
         email: account?.email || '',
         role: account?.role || payload.role || 'admin',
         permissions: account?.permissions || payload.permissions || null,
+        role: userRole,
+        permissions: userPermissions,
         is_active: account?.is_active ?? true,
         created_at: account?.created_at || null,
       }

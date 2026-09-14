@@ -29,12 +29,22 @@ const loginWithJson = async (identifier, password) => {
       return null;
     }
     
+    let permissions = admin.permissions;
+    if (typeof permissions === 'string') {
+      try { permissions = JSON.parse(permissions); } catch { permissions = []; }
+    }
+    if (admin.role === 'staff') {
+      if (!Array.isArray(permissions)) permissions = [];
+      if (!permissions.includes('dashboard')) permissions.unshift('dashboard');
+    }
+
     return {
       id: admin.id,
       username: admin.username,
       email: admin.email,
       role: admin.role || 'admin',
       permissions: admin.permissions || (admin.username === 'admin' ? null : []),
+      permissions: admin.role === 'admin' || admin.role === 'super_admin' ? null : permissions,
     };
   } catch (error) {
     console.error('JSON login error:', error);
@@ -113,11 +123,25 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
     }
 
+    let permissions = admin.permissions;
+    if (typeof permissions === 'string') {
+      try { permissions = JSON.parse(permissions); } catch { permissions = []; }
+    }
+    if (admin.role === 'staff') {
+      if (!Array.isArray(permissions)) permissions = [];
+      if (!permissions.includes('dashboard')) {
+        permissions.unshift('dashboard');
+      }
+    } else if (admin.role === 'admin' || admin.role === 'super_admin') {
+      permissions = null;
+    }
+
     const token = signToken({
       id: admin.id,
       username: admin.username,
       role: admin.role || 'admin',
       permissions: admin.permissions || (admin.username === 'admin' ? null : []),
+      permissions,
     });
 
     const response = NextResponse.json({ success: true, token });

@@ -51,12 +51,17 @@ export default function EditStaffPage() {
         const member = data.staff?.find((s) => String(s.id) === String(id));
         if (member) {
           setOriginalUsername(member.username);
+          let perms = Array.isArray(member.permissions) ? member.permissions : [];
+          if ((member.role === "staff" || !member.role) && !perms.includes("dashboard")) {
+            perms = ["dashboard", ...perms];
+          }
           setForm({
             username: member.username,
             email: member.email || "",
             password: "",
             role: member.role || "staff",
             permissions: Array.isArray(member.permissions) ? member.permissions : [],
+            permissions: perms,
           });
         } else {
           setError("Staff member not found");
@@ -72,6 +77,7 @@ export default function EditStaffPage() {
     : PERMISSION_OPTIONS.filter((p) => p.value !== "staff");
 
   const togglePermission = (perm) => {
+    if (perm === "dashboard") return; // Dashboard is always assigned
     setForm((prev) => {
       const perms = prev.permissions.includes(perm)
         ? prev.permissions.filter((p) => p !== perm)
@@ -87,6 +93,13 @@ export default function EditStaffPage() {
       role: newRole,
       // Clear permissions when switching to admin/super_admin
       permissions: newRole === "admin" || newRole === "super_admin" ? [] : prev.permissions,
+      // Clear permissions when switching to admin/super_admin, keep dashboard for staff
+      permissions:
+        newRole === "admin" || newRole === "super_admin"
+          ? []
+          : prev.permissions.includes("dashboard")
+          ? prev.permissions
+          : ["dashboard", ...prev.permissions],
     }));
   };
 
@@ -231,6 +244,38 @@ export default function EditStaffPage() {
                       {perm.label}
                     </label>
                   ))}
+                  {visiblePermissions.map((perm) => {
+                    const isDashboard = perm.value === "dashboard";
+                    const isChecked = isDashboard || form.permissions.includes(perm.value);
+                    return (
+                      <label
+                        key={perm.value}
+                        className={`flex items-center justify-between rounded-lg border px-3 py-2 text-sm transition-colors ${
+                          isDashboard
+                            ? "bg-teal-50 border-teal-300 text-teal-900 cursor-default opacity-90"
+                            : isChecked
+                            ? "bg-teal-50 border-teal-300 text-teal-900 cursor-pointer"
+                            : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50 cursor-pointer"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            disabled={isDashboard || originalUsername === "admin"}
+                            onChange={() => !isDashboard && togglePermission(perm.value)}
+                            className="h-4 w-4 accent-teal-600"
+                          />
+                          <span>{perm.label}</span>
+                        </div>
+                        {isDashboard && (
+                          <span className="text-[10px] font-semibold bg-teal-200/80 text-teal-900 px-1.5 py-0.5 rounded">
+                            Default
+                          </span>
+                        )}
+                      </label>
+                    );
+                  })}
                 </div>
               </div>
             ) : (

@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 
-// Path prefix -> permission key mapping for admin pages
+// Path prefix -> permission key mapping for admin pages (dashboard and profile accessible to all)
 const PERMISSION_BY_PATH = [
-  { prefix: '/dashboard', permission: 'dashboard' },
+  { prefix: '/dashboard', permission: null },
   { prefix: '/homepage', permission: 'homepage' },
   { prefix: '/offers', permission: 'offers' },
   { prefix: '/banner', permission: 'banner' },
@@ -165,13 +165,21 @@ export function middleware(request) {
 
     // Staff: restrict pages based on permissions
     if (payload.role === 'staff') {
+      // Dashboard and profile are accessible to all authenticated staff members
+      if (pathname === '/dashboard' || pathname.startsWith('/dashboard/')) {
+        return NextResponse.next();
+      }
+
       const matched = PERMISSION_BY_PATH.find((item) =>
         pathname.startsWith(item.prefix)
       );
       if (!matched || !matched.permission) return NextResponse.next();
 
-      const userPerms = payload.permissions || [];
-      if (!userPerms.includes(matched.permission)) {
+      let userPerms = payload.permissions || [];
+      if (typeof userPerms === 'string') {
+        try { userPerms = JSON.parse(userPerms); } catch { userPerms = []; }
+      }
+      if (!Array.isArray(userPerms) || !userPerms.includes(matched.permission)) {
         return NextResponse.redirect(new URL('/dashboard', request.url));
       }
     }

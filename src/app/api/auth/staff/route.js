@@ -35,6 +35,16 @@ export async function GET(request) {
       ...admin,
       permissions: parsePermissions(admin.permissions),
     }));
+    const filtered = admins.map(({ password, ...admin }) => {
+      let perms = parsePermissions(admin.permissions);
+      if (admin.role === 'staff' && !perms.includes('dashboard')) {
+        perms.unshift('dashboard');
+      }
+      return {
+        ...admin,
+        permissions: perms,
+      };
+    });
     
     // Non-admin can only see themselves
     if (payload.role !== 'admin' && payload.role !== 'super_admin') {
@@ -73,6 +83,10 @@ export async function POST(request) {
     
     const hashedPassword = await bcrypt.hash(password, 10);
     const cleanPermissions = (permissions || []).filter(p => AVAILABLE_PERMISSIONS.includes(p));
+    const targetRole = role || 'staff';
+    if (targetRole === 'staff' && !cleanPermissions.includes('dashboard')) {
+      cleanPermissions.unshift('dashboard');
+    }
     
     const staff = await db.insert('admins', {
       username,
@@ -125,6 +139,12 @@ export async function PUT(request) {
     if (role && existingStaff.username !== 'admin') updateData.role = role;
     if (permissions !== undefined) {
       updateData.permissions = permissions.filter(p => AVAILABLE_PERMISSIONS.includes(p));
+      const cleanPerms = permissions.filter(p => AVAILABLE_PERMISSIONS.includes(p));
+      const targetRole = role || existingStaff.role;
+      if (targetRole === 'staff' && !cleanPerms.includes('dashboard')) {
+        cleanPerms.unshift('dashboard');
+      }
+      updateData.permissions = cleanPerms;
     }
     if (is_active !== undefined && existingStaff.username !== 'admin') updateData.is_active = is_active;
     

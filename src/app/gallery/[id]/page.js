@@ -123,24 +123,7 @@ export default function EditGalleryPage() {
         <div className="admin-card space-y-4">
           <div>
             <label className="admin-label">Upload New Image</label>
-            <div className="flex items-center gap-4">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
-                onChange={handleImageUpload}
-                className="admin-input flex-1"
-                disabled={uploading}
-              />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="admin-btn"
-                disabled={uploading}
-              >
-                {uploading ? "Uploading..." : "Choose File"}
-              </button>
-            </div>
+
               <div className="flex items-center gap-3">
                 <input
                   ref={fileInputRef}
