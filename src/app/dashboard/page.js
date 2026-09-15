@@ -48,7 +48,7 @@ export default function DashboardPage() {
   const cards = [
     { label: "Banner Images", value: stats.bannerImages, icon: Image, color: "bg-[#24564C]" },
     { label: "Trending Items", value: stats.trendingItems, icon: TrendingUp, color: "bg-[#789B89]" },
-    { label: "Region Pricing", value: stats.pricingRegions, icon: DollarSign, color: "bg-[#C8755A]" },
+    // { label: "Region Pricing", value: stats.pricingRegions, icon: DollarSign, color: "bg-[#C8755A]" },
     { label: "Destinations", value: stats.destinations, icon: MapPin, color: "bg-[#C9958B]" },
     { label: "Homepage Sections", value: stats.sections, icon: Layers, color: "bg-[#173F38]" },
   ];
@@ -88,10 +88,10 @@ export default function DashboardPage() {
               <p className="font-medium text-[#24564C]">Manage Trending</p>
               <p className="text-sm text-[#5D756C] mt-1">Toggle ON/OFF & add items</p>
             </a>
-            <a href="/pricing" className="p-4 bg-[#DCE8DF] rounded-lg hover:bg-[#789B89] hover:text-white transition-colors">
+            {/* <a href="/pricing" className="p-4 bg-[#DCE8DF] rounded-lg hover:bg-[#789B89] hover:text-white transition-colors">
               <p className="font-medium text-[#24564C]">Region Pricing</p>
               <p className="text-sm text-[#5D756C] mt-1">Update pricing per region</p>
-            </a>
+            </a> */}
             <a href="/destinations" className="p-4 bg-[#DCE8DF] rounded-lg hover:bg-[#789B89] hover:text-white transition-colors">
               <p className="font-medium text-[#24564C]">Destinations</p>
               <p className="text-sm text-[#5D756C] mt-1">Manage popular destinations</p>

@@ -38,6 +38,12 @@ export default function TeamMembersPage() {
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    if (file.type !== "image/webp" && !file.name.toLowerCase().endsWith(".webp")) {
+      setMessage("Please upload only WebP (.webp) images.");
+      setTimeout(() => setMessage(""), 3000);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
     setUploading(true);
     try {
       const formData = new FormData();
@@ -133,7 +139,7 @@ export default function TeamMembersPage() {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+            accept="image/webp,.webp"
             onChange={handleImageUpload}
             className="hidden"
             disabled={uploading}

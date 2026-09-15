@@ -20,6 +20,7 @@ export default function MediaPage() {
   const [copiedUrl, setCopiedUrl] = useState("");
   const [clientDims, setClientDims] = useState({});
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [viewMode, setViewMode] = useState("list"); // 'list' | 'grid'
   const fileInputRef = useRef(null);
 
   // Check user role on mount
@@ -33,6 +34,23 @@ export default function MediaPage() {
       })
       .catch((err) => console.error("Error fetching user profile:", err));
   }, []);
+
+  const formatDate = (isoOrTimestamp) => {
+    if (!isoOrTimestamp) return "—";
+    try {
+      const d = new Date(isoOrTimestamp);
+      if (isNaN(d.getTime())) return "—";
+      return d.toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return "—";
+    }
+  };
 
   const getPixels = (item) => {
     if (!item || item.mediaType === "video") return null;
@@ -80,13 +98,27 @@ export default function MediaPage() {
   }, [mediaList, activeTab, search]);
 
   const handleUpload = async (e) => {
-    const files = e.target.files;
-    if (!files || !files.length) return;
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    const invalidImage = files.find((file) => {
+      const isImage = file.type.startsWith("image/") || /\.(jpg|jpeg|png|gif|bmp|svg|tiff|webp)$/i.test(file.name);
+      if (isImage) {
+        return file.type !== "image/webp" && !file.name.toLowerCase().endsWith(".webp");
+      }
+      return false;
+    });
+
+    if (invalidImage) {
+      toast.error("Upload failed: only WebP (.webp) images are accepted.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
 
     setUploading(true);
     let successCount = 0;
     try {
-      for (const file of Array.from(files)) {
+      for (const file of files) {
         const formData = new FormData();
         formData.append("file", file);
         const res = await fetch("/api/upload", {
@@ -186,7 +218,7 @@ export default function MediaPage() {
               ref={fileInputRef}
               type="file"
               multiple
-              accept="image/jpeg,image/jpg,image/png,image/gif,image/webp,video/mp4,video/webm,video/ogg,video/quicktime"
+              accept="image/webp,.webp,video/mp4,video/webm,video/ogg,video/quicktime"
               onChange={handleUpload}
               className="hidden"
               disabled={uploading}
@@ -251,18 +283,54 @@ export default function MediaPage() {
               </button>
             </div>
 
-            {/* Refresh */}
-            <button
-              type="button"
-              onClick={fetchMedia}
-              disabled={loading}
-              className="admin-btn-secondary text-xs flex items-center gap-1.5 self-end sm:self-auto"
-            >
-              <svg className={`w-3.5 h-3.5 ${loading ? "animate-spin text-teal-600" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              Refresh
-            </button>
+            <div className="flex items-center gap-2 self-end sm:self-auto">
+              {/* View Mode Toggle: List vs Grid */}
+              <div className="flex items-center bg-gray-100 p-1 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setViewMode("list")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                    viewMode === "list"
+                      ? "bg-white text-teal-800 shadow-sm"
+                      : "text-gray-600 hover:text-gray-900"
+                  }`}
+                  title="List View"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                  </svg>
+                  <span>List</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("grid")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                    viewMode === "grid"
+                      ? "bg-white text-teal-800 shadow-sm"
+                      : "text-gray-600 hover:text-gray-900"
+                  }`}
+                  title="Grid View"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                  </svg>
+                  <span>Grid</span>
+                </button>
+              </div>
+
+              {/* Refresh */}
+              <button
+                type="button"
+                onClick={fetchMedia}
+                disabled={loading}
+                className="admin-btn-secondary text-xs flex items-center gap-1.5"
+              >
+                <svg className={`w-3.5 h-3.5 ${loading ? "animate-spin text-teal-600" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Refresh
+              </button>
+            </div>
           </div>
 
           {/* Search Input */}
@@ -299,6 +367,188 @@ export default function MediaPage() {
             <p className="text-xs text-gray-400 mt-1">
               Upload images or videos using the button above or clear the search query.
             </p>
+          </div>
+        ) : viewMode === "list" ? (
+          <div className="admin-card overflow-x-auto shadow-sm border border-gray-200 rounded-xl bg-white">
+            <table className="w-full min-w-[850px] text-left text-sm">
+              <thead>
+                <tr className="border-b border-gray-200 bg-gray-50 text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  <th className="px-4 py-3 w-16 text-center">Preview</th>
+                  <th className="px-4 py-3">File Name</th>
+                  <th className="px-4 py-3">Type</th>
+                  <th className="px-4 py-3">Resolution</th>
+                  <th className="px-4 py-3">Size</th>
+                  <th className="px-4 py-3">Date Added</th>
+                  <th className="px-4 py-3">Source</th>
+                  <th className="px-4 py-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filteredMedia.map((item) => {
+                  const isSelected = selectedMedia?.url === item.url;
+                  const isVideo = item.mediaType === "video";
+                  const pixels = getPixels(item);
+                  const ext = item.url.split(".").pop()?.split("?")[0]?.toUpperCase() || (isVideo ? "VIDEO" : "WEBP");
+
+                  return (
+                    <tr
+                      key={item.url}
+                      onClick={() => setSelectedMedia(item)}
+                      className={`cursor-pointer transition-colors hover:bg-teal-50/40 ${
+                        isSelected ? "bg-teal-50/70" : ""
+                      }`}
+                    >
+                      {/* Thumbnail */}
+                      <td className="px-4 py-2.5 text-center">
+                        <div className="relative w-12 h-12 mx-auto rounded-lg overflow-hidden bg-gray-900 border border-gray-200 flex items-center justify-center flex-shrink-0 shadow-xs">
+                          {isVideo ? (
+                            <>
+                              <video src={item.url} className="w-full h-full object-cover opacity-80" />
+                              <span className="absolute inset-0 flex items-center justify-center text-white text-xs">▶</span>
+                            </>
+                          ) : (
+                            <img
+                              src={item.url}
+                              alt={item.name}
+                              loading="lazy"
+                              onLoad={(e) => {
+                                const w = e.currentTarget.naturalWidth;
+                                const h = e.currentTarget.naturalHeight;
+                                if (w && h && (!item.width || !item.height)) {
+                                  setClientDims((prev) => ({ ...prev, [item.url]: `${w} × ${h} px` }));
+                                }
+                              }}
+                              className="w-full h-full object-cover"
+                            />
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Name & URL */}
+                      <td className="px-4 py-2.5 max-w-xs">
+                        <p className="font-semibold text-gray-900 text-xs truncate" title={item.name || item.fileName}>
+                          {item.name || item.fileName}
+                        </p>
+                        <p className="text-[11px] font-mono text-gray-400 truncate mt-0.5" title={item.url}>
+                          {item.url}
+                        </p>
+                      </td>
+
+                      {/* Type Badge */}
+                      <td className="px-4 py-2.5 whitespace-nowrap">
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                            isVideo
+                              ? "bg-purple-100 text-purple-700"
+                              : "bg-teal-100 text-teal-800"
+                          }`}
+                        >
+                          {isVideo ? "🎬 Video" : "🖼️ Image"}
+                          <span className="text-[9px] uppercase opacity-75 font-mono">({ext})</span>
+                        </span>
+                      </td>
+
+                      {/* Resolution / Dimensions */}
+                      <td className="px-4 py-2.5 whitespace-nowrap text-xs font-mono">
+                        {pixels ? (
+                          <span className="inline-block bg-teal-50 text-teal-800 border border-teal-200 px-2 py-0.5 rounded text-[11px] font-semibold">
+                            {pixels}
+                          </span>
+                        ) : isVideo ? (
+                          <span className="text-gray-400 text-xs">—</span>
+                        ) : (
+                          <span className="text-gray-400 text-xs">—</span>
+                        )}
+                      </td>
+
+                      {/* File Size */}
+                      <td className="px-4 py-2.5 whitespace-nowrap text-xs text-gray-600 font-medium">
+                        {formatFileSize(item.size) || "—"}
+                      </td>
+
+                      {/* Date */}
+                      <td className="px-4 py-2.5 whitespace-nowrap text-xs text-gray-500">
+                        {formatDate(item.date || item.timestamp)}
+                      </td>
+
+                      {/* Source */}
+                      <td className="px-4 py-2.5 whitespace-nowrap">
+                        <span
+                          className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                            item.source === "upload"
+                              ? "bg-blue-50 text-blue-700 border border-blue-200"
+                              : "bg-amber-50 text-amber-700 border border-amber-200"
+                          }`}
+                        >
+                          {item.source === "upload" ? "Server File" : "DB Record"}
+                        </span>
+                      </td>
+
+                      {/* Actions */}
+                      <td className="px-4 py-2.5 whitespace-nowrap text-right">
+                        <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                          {/* Copy URL */}
+                          <button
+                            type="button"
+                            onClick={() => handleCopy(item.url)}
+                            className="p-1.5 text-gray-600 hover:text-teal-700 hover:bg-teal-50 rounded-lg transition-colors"
+                            title="Copy URL"
+                          >
+                            {copiedUrl === item.url ? (
+                              <span className="text-xs font-bold text-teal-700">✓ Copied</span>
+                            ) : (
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                              </svg>
+                            )}
+                          </button>
+
+                          {/* View Details / Select */}
+                          <button
+                            type="button"
+                            onClick={() => setSelectedMedia(item)}
+                            className="p-1.5 text-gray-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="Preview Details"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                          </button>
+
+                          {/* Open in new tab */}
+                          <a
+                            href={item.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-1.5 text-gray-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition-colors"
+                            title="Open original file in new tab"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                            </svg>
+                          </a>
+
+                          {/* Delete (Super Admin only) */}
+                          {isSuperAdmin && item.source === "upload" && (
+                            <button
+                              type="button"
+                              onClick={() => setDeleteTarget(item)}
+                              className="p-1.5 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Delete file from server (Super Admin only)"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">

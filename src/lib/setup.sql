@@ -36,6 +36,7 @@ WHERE NOT EXISTS (SELECT 1 FROM banner_settings);
 CREATE TABLE IF NOT EXISTS banner_images (
   id SERIAL PRIMARY KEY,
   image_url TEXT NOT NULL,
+  mobile_image_url TEXT DEFAULT '',
   sort_order INT DEFAULT 0,
   is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -43,6 +44,7 @@ CREATE TABLE IF NOT EXISTS banner_images (
 
 -- Alter existing tables to support base64 images (TEXT instead of VARCHAR)
 ALTER TABLE IF EXISTS banner_images ALTER COLUMN image_url TYPE TEXT;
+ALTER TABLE IF EXISTS banner_images ADD COLUMN IF NOT EXISTS mobile_image_url TEXT DEFAULT '';
 ALTER TABLE IF EXISTS trending_items ALTER COLUMN image_url TYPE TEXT;
 ALTER TABLE IF EXISTS popular_destinations ALTER COLUMN image_url TYPE TEXT;
 ALTER TABLE IF EXISTS trips ALTER COLUMN image_url TYPE TEXT;

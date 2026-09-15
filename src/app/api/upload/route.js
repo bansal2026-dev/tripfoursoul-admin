@@ -7,15 +7,10 @@ import sharp from 'sharp';
 // Max file size (50 MB for videos/images)
 const MAX_SIZE = 50 * 1024 * 1024;
 
-// Allowed image and video types
-const ALLOWED_TYPES = [
-  'image/webp',
-  'image/jpeg',
-  'image/jpg',
-  'image/png',
-  'image/gif',
-  'image/svg+xml',
-  'image/avif',
+// Allowed image types: ONLY WebP is allowed!
+const ALLOWED_IMAGE_TYPES = ['image/webp'];
+// Allowed video types
+const ALLOWED_VIDEO_TYPES = [
   'video/mp4',
   'video/webm',
   'video/ogg',
@@ -24,9 +19,24 @@ const ALLOWED_TYPES = [
   'video/m4v',
 ];
 
-// Sanitize filename while keeping the real human name
-function sanitizeBaseName(rawName) {
-  const rawExt = path.extname(rawName) || '.webp';
+// Determine whether to return base64 Data URL (local/development) or file path (production)
+function shouldUseBase64(isImage) {
+  // Only images can be stored as base64; videos are always saved as files
+  if (!isImage) return false;
+
+  // 1. Explicit override via UPLOAD_STORAGE environment variable
+  const storage = (process.env.UPLOAD_STORAGE || '').toLowerCase().trim();
+  if (storage === 'base64') return true;
+  if (storage === 'file' || storage === 'uploads') return false;
+
+  // 2. Default based on environment: production -> file, development/local -> base64
+  const isProd = process.env.NODE_ENV === 'production' || (process.env.APP_ENV || '').toLowerCase() === 'production';
+  return !isProd;
+}
+
+// Sanitize filename while keeping the real human name and ensuring .webp for images
+function sanitizeBaseName(rawName, isImage = false) {
+  const rawExt = path.extname(rawName) || (isImage ? '.webp' : '');
   const rawBase = path.basename(rawName, rawExt);
 
   let cleanBase = rawBase
@@ -37,17 +47,17 @@ function sanitizeBaseName(rawName) {
     .replace(/^[-_]+|[-_]+$/g, '');
 
   if (!cleanBase) cleanBase = 'image';
-  const ext = rawExt.toLowerCase();
+  const ext = isImage ? '.webp' : rawExt.toLowerCase();
 
   return { cleanBase, ext };
 }
 
 // Save uploaded buffer to public/uploads using real filename (handling duplicates safely)
-async function saveUploadWithRealName(buffer, originalFilename = 'image.webp') {
+async function saveUploadWithRealName(buffer, originalFilename = 'image.webp', isImage = false) {
   const uploadsDirectory = path.join(process.cwd(), 'public', 'uploads');
   await mkdir(uploadsDirectory, { recursive: true });
 
-  const { cleanBase, ext } = sanitizeBaseName(originalFilename);
+  const { cleanBase, ext } = sanitizeBaseName(originalFilename, isImage);
   let targetFilename = `${cleanBase}${ext}`;
   let counter = 1;
 
@@ -95,37 +105,46 @@ export async function GET(request) {
     }
 
     let imageBuffer;
-    let contentType = 'image/jpeg';
+    let contentType = 'image/webp';
 
     if (imageUrl) {
-      const response = await fetch(imageUrl);
-      if (!response.ok) {
-        return NextResponse.json({ error: 'Failed to fetch image' }, { status: 400 });
+      if (imageUrl.startsWith('data:image/')) {
+        return NextResponse.json({
+          success: true,
+          base64Image: imageUrl,
+          contentType: imageUrl.split(';')[0].replace('data:', '') || 'image/webp',
+        });
       }
-      const arrayBuffer = await response.arrayBuffer();
-      imageBuffer = Buffer.from(arrayBuffer);
 
-      if (imageUrl.endsWith('.png')) contentType = 'image/png';
-      else if (imageUrl.endsWith('.gif')) contentType = 'image/gif';
-      else if (imageUrl.endsWith('.webp')) contentType = 'image/webp';
+      if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+        const response = await fetch(imageUrl);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch image: ${response.statusText}`);
+        }
+        imageBuffer = Buffer.from(await response.arrayBuffer());
+        contentType = response.headers.get('content-type') || 'image/webp';
+      } else if (imageUrl.startsWith('/uploads/')) {
+        const localPath = path.join(process.cwd(), 'public', imageUrl);
+        imageBuffer = fs.readFileSync(localPath);
+        contentType = 'image/webp';
+      } else {
+        return NextResponse.json({ error: 'Invalid image URL' }, { status: 400 });
+      }
     } else if (imagePath) {
-      const cleanPath = imagePath.startsWith('/') ? imagePath.slice(1) : imagePath;
-      const fullPath = path.join(process.cwd(), 'public', cleanPath);
-
+      const fullPath = path.join(process.cwd(), 'public', imagePath.startsWith('/') ? imagePath.slice(1) : imagePath);
       if (!fs.existsSync(fullPath)) {
         return NextResponse.json({ error: 'Image not found' }, { status: 404 });
       }
-
       imageBuffer = fs.readFileSync(fullPath);
-
-      const ext = path.extname(fullPath).toLowerCase();
-      if (ext === '.png') contentType = 'image/png';
-      else if (ext === '.gif') contentType = 'image/gif';
-      else if (ext === '.webp') contentType = 'image/webp';
+      contentType = 'image/webp';
     }
 
-    const base64Image = imageBuffer.toString('base64');
-    const dataUrl = `data:${contentType};base64,${base64Image}`;
+    if (!imageBuffer) {
+      return NextResponse.json({ error: 'Image not found' }, { status: 404 });
+    }
+
+    const base64 = imageBuffer.toString('base64');
+    const dataUrl = `data:${contentType};base64,${base64}`;
 
     return NextResponse.json({
       success: true,
@@ -151,23 +170,50 @@ export async function POST(request) {
         return NextResponse.json({ error: 'No base64 image provided' }, { status: 400 });
       }
 
-      const mimeMatch = base64Image.match(/^data:(image\/[\w+]+);base64,/);
-      const detectedType = mimeMatch ? mimeMatch[1] : 'image/webp';
       const base64Data = base64Image.replace(/^data:image\/[\w+]+;base64,/, '');
-      const buffer = Buffer.from(base64Data, 'base64');
-
-      if (!ALLOWED_TYPES.includes(detectedType)) {
-        return NextResponse.json({ error: 'Invalid file type. Allowed: WebP, JPEG, PNG, GIF, SVG.' }, { status: 400 });
-      }
+      let buffer = Buffer.from(base64Data, 'base64');
 
       if (buffer.length > MAX_SIZE) {
-        return NextResponse.json({ error: 'File size too large. Maximum 10 MB allowed.' }, { status: 400 });
+        return NextResponse.json({ error: 'File size too large. Maximum 50 MB allowed.' }, { status: 400 });
       }
 
-      const originalName = fileName || name || `image.${detectedType.split('/')[1] || 'webp'}`;
-      const savedFilename = await saveUploadWithRealName(buffer, originalName);
-      const { width, height, format } = await getImageDimensions(buffer);
+      // Enforce WebP: convert image to WebP buffer to guarantee 100% webp
+      try {
+        buffer = await sharp(buffer).webp({ quality: 85 }).toBuffer();
+      } catch (err) {
+        return NextResponse.json({ error: 'Failed to process WebP image: ' + err.message }, { status: 400 });
+      }
 
+      const originalName = fileName || name || 'image.webp';
+      const { width, height } = await getImageDimensions(buffer);
+
+      // In development / local mode: return base64 data URL directly
+      if (shouldUseBase64(true)) {
+        try {
+          await saveUploadWithRealName(buffer, originalName, true);
+        } catch {
+          // ignore local disk write errors
+        }
+
+        const dataUrl = `data:image/webp;base64,${buffer.toString('base64')}`;
+        return NextResponse.json({
+          success: true,
+          imageUrl: dataUrl,
+          fileName: originalName,
+          realName: originalName,
+          width,
+          height,
+          format: 'webp',
+          size: buffer.length,
+          storage: 'base64',
+          message: width && height
+            ? `WebP image uploaded as Base64 (${width} × ${height} px)`
+            : 'WebP image uploaded as Base64',
+        });
+      }
+
+      // In production mode: save to /public/uploads/
+      const savedFilename = await saveUploadWithRealName(buffer, originalName, true);
       return NextResponse.json({
         success: true,
         imageUrl: `/uploads/${savedFilename}`,
@@ -175,11 +221,12 @@ export async function POST(request) {
         realName: originalName,
         width,
         height,
-        format,
+        format: 'webp',
         size: buffer.length,
+        storage: 'file',
         message: width && height
-          ? `Image uploaded successfully (${width} × ${height} px)`
-          : 'Image uploaded successfully',
+          ? `WebP image uploaded successfully (${width} × ${height} px)`
+          : 'WebP image uploaded successfully',
       });
     }
 
@@ -191,20 +238,72 @@ export async function POST(request) {
       return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
     }
 
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      return NextResponse.json({ error: 'Invalid file type. Allowed: WebP, JPEG, PNG, GIF, SVG.' }, { status: 400 });
+    const fileName = (file.name || '').toLowerCase();
+    const fileType = (file.type || '').toLowerCase();
+    const isVideo = fileType.startsWith('video/') || /\.(mp4|webm|ogg|mov|mkv|m4v)$/i.test(fileName);
+    const isImage = fileType.startsWith('image/') || /\.(webp|jpg|jpeg|png|gif|avif|bmp|svg)$/i.test(fileName) || !isVideo;
+
+    // Reject non-webp images strictly
+    if (isImage) {
+      const isWebp = fileType === 'image/webp' || fileName.endsWith('.webp');
+      if (!isWebp) {
+        return NextResponse.json(
+          { error: 'Only WebP images (.webp) are allowed! Sirf WebP format ki image upload ho sakti hai.' },
+          { status: 400 }
+        );
+      }
+    } else if (isVideo) {
+      if (!ALLOWED_VIDEO_TYPES.includes(fileType) && !/\.(mp4|webm|ogg|mov|mkv|m4v)$/i.test(fileName)) {
+        return NextResponse.json({ error: 'Invalid video file type.' }, { status: 400 });
+      }
     }
 
     if (file.size > MAX_SIZE) {
-      return NextResponse.json({ error: 'File size too large. Maximum 10 MB allowed.' }, { status: 400 });
+      return NextResponse.json({ error: 'File size too large. Maximum 50 MB allowed.' }, { status: 400 });
     }
 
     const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
+    let buffer = Buffer.from(bytes);
 
-    // Save with its REAL original filename
-    const savedFilename = await saveUploadWithRealName(buffer, file.name || 'image.webp');
-    const { width, height, format } = await getImageDimensions(buffer);
+    if (isImage) {
+      // Process through sharp to ensure clean, optimized WebP format
+      try {
+        buffer = await sharp(buffer).webp({ quality: 85 }).toBuffer();
+      } catch (err) {
+        // If sharp cannot process (e.g. malformed webp), return error
+        return NextResponse.json({ error: 'Invalid or corrupt WebP image file.' }, { status: 400 });
+      }
+    }
+
+    const { width, height, format } = isImage ? await getImageDimensions(buffer) : { width: null, height: null, format: null };
+
+    // In development / local mode: return base64 data URL for images
+    if (shouldUseBase64(isImage)) {
+      try {
+        await saveUploadWithRealName(buffer, file.name || 'image.webp', isImage);
+      } catch {
+        // ignore local disk write errors
+      }
+
+      const dataUrl = `data:image/webp;base64,${buffer.toString('base64')}`;
+      return NextResponse.json({
+        success: true,
+        imageUrl: dataUrl,
+        fileName: file.name || 'image.webp',
+        realName: file.name || 'image.webp',
+        width,
+        height,
+        format: 'webp',
+        size: buffer.length,
+        storage: 'base64',
+        message: width && height
+          ? `WebP image uploaded as Base64 (${width} × ${height} px)`
+          : 'WebP image uploaded as Base64',
+      });
+    }
+
+    // In production mode (or videos): save to /public/uploads/
+    const savedFilename = await saveUploadWithRealName(buffer, file.name || 'image.webp', isImage);
 
     return NextResponse.json({
       success: true,
@@ -213,14 +312,15 @@ export async function POST(request) {
       realName: file.name || savedFilename,
       width,
       height,
-      format,
+      format: isImage ? 'webp' : format,
       size: buffer.length,
+      storage: 'file',
       message: width && height
-        ? `Image uploaded successfully (${width} × ${height} px)`
-        : 'Image uploaded successfully',
+        ? `WebP image uploaded successfully (${width} × ${height} px)`
+        : 'File uploaded successfully',
     });
   } catch (error) {
     console.error('Upload error:', error);
-    return NextResponse.json({ error: 'Failed to upload image: ' + error.message }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to upload file: ' + error.message }, { status: 500 });
   }
 }

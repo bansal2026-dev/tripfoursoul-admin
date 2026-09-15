@@ -46,6 +46,11 @@ export default function EditBlogCategoryPage() {
   const uploadImage = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    if (file.type !== "image/webp" && !file.name.toLowerCase().endsWith(".webp")) {
+      toast.error("Please upload only WebP (.webp) images.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
     setUploading(true);
     try { const data = new FormData(); data.append("file", file); const response = await fetch("/api/upload", { method: "POST", body: data }); const result = await response.json(); if (!response.ok || !result.imageUrl) throw new Error(result.error || "Image upload failed"); setForm((previous) => ({ ...previous, image_url: result.imageUrl })); }
     catch (error) { toast.error(error.message || "Image upload failed"); }
@@ -129,6 +134,7 @@ export default function EditBlogCategoryPage() {
                 <label className="admin-label">Category Image *</label>
                 <div className="flex gap-2">
                   <input ref={fileInputRef} type="file" accept="image/*" onChange={uploadImage} className="admin-input flex-1" disabled={uploading} />
+                  <input ref={fileInputRef} type="file" accept="image/webp,.webp" onChange={uploadImage} className="admin-input flex-1" disabled={uploading} />
                   <button type="button" onClick={() => fileInputRef.current?.click()} className="admin-btn-secondary whitespace-nowrap text-xs" disabled={uploading}>
                     {uploading ? "Uploading..." : "Upload Image"}
                   </button>

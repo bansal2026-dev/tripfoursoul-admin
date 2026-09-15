@@ -3,27 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
-
-const PERMISSION_OPTIONS = [
-  { value: "banner", label: "Banner" },
-  { value: "offers", label: "Offers" },
-  { value: "trending", label: "Trending" },
-  { value: "pricing", label: "Region Pricing" },
-  { value: "destinations", label: "Popular Destinations" },
-  { value: "packages", label: "Packages" },
-  { value: "spiritual", label: "Spiritual Escape" },
-  { value: "about", label: "About Us" },
-  { value: "features", label: "Features" },
-  { value: "services", label: "Services" },
-  { value: "testimonials", label: "Testimonials" },
-  { value: "page-banners", label: "Page Banners" },
-  { value: "gallery", label: "Gallery" },
-  { value: "team-members", label: "Team Members" },
-  { value: "deals", label: "Deals" },
-  { value: "sections", label: "Homepage Sections" },
-  { value: "blog", label: "Blog" },
-  { value: "staff", label: "Staff Management" },
-];
+import { PERMISSION_OPTIONS } from "@/lib/permissions";
 
 export default function CreateStaffPage() {
   const router = useRouter();
@@ -37,10 +17,7 @@ export default function CreateStaffPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  // Hide "staff" permission when role is admin or super_admin
-  const visiblePermissions = (form.role === "admin" || form.role === "super_admin")
-    ? []
-    : PERMISSION_OPTIONS.filter((p) => p.value !== "staff");
+  const visiblePermissions = form.role === "staff" ? PERMISSION_OPTIONS : [];
 
   const togglePermission = (perm) => {
     setForm((prev) => {
@@ -165,8 +142,28 @@ export default function CreateStaffPage() {
             {/* Permissions — only shown for "staff" role */}
             {form.role === "staff" ? (
               <div>
-                <label className="admin-label">Permissions</label>
-                <p className="text-xs text-gray-500 mb-3">Select which sections this staff member can access.</p>
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <label className="admin-label mb-0">Permissions</label>
+                    <p className="text-xs text-gray-500">Select which sections this staff member can access.</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setForm((prev) => ({ ...prev, permissions: PERMISSION_OPTIONS.map((p) => p.value) }))}
+                      className="text-xs font-semibold text-teal-700 hover:text-teal-900 bg-teal-50 hover:bg-teal-100 px-2.5 py-1 rounded-md border border-teal-200 transition-colors"
+                    >
+                      Select All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setForm((prev) => ({ ...prev, permissions: ["dashboard"] }))}
+                      className="text-xs font-semibold text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 px-2.5 py-1 rounded-md border border-gray-200 transition-colors"
+                    >
+                      Deselect All
+                    </button>
+                  </div>
+                </div>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                   {visiblePermissions.map((perm) => (
                     <label

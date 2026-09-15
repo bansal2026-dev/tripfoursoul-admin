@@ -23,6 +23,11 @@ export default function NewTestimonialPage() {
   const handleImageUpload = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    if (file.type !== "image/webp" && !file.name.toLowerCase().endsWith(".webp")) {
+      setMessage("Please upload only WebP (.webp) images.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
     setUploading(true);
     try {
       const formData = new FormData();
@@ -90,7 +95,7 @@ export default function NewTestimonialPage() {
             <div>
               <label className="admin-label">Customer Image</label>
               <div className="flex gap-2">
-                <input ref={fileInputRef} type="file" accept="image/jpeg,image/jpg,image/png,image/gif,image/webp" onChange={handleImageUpload} className="admin-input flex-1" disabled={uploading} />
+                <input ref={fileInputRef} type="file" accept="image/webp,.webp" onChange={handleImageUpload} className="admin-input flex-1" disabled={uploading} />
                 <button type="button" onClick={() => fileInputRef.current?.click()} className="admin-btn-secondary whitespace-nowrap text-xs" disabled={uploading}>{uploading ? "Uploading..." : "Upload"}</button>
                 <button
                   type="button"

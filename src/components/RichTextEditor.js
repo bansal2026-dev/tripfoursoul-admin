@@ -286,7 +286,7 @@ export default function RichTextEditor({ value, onChange, placeholder, rows = 6,
     event.target.value = "";
     if (!file) return;
 
-    if (file.type !== "image/webp") {
+    if (file.type !== "image/webp" && !file.name.toLowerCase().endsWith(".webp")) {
       setImageError("Only WebP images can be inserted.");
       return;
     }
@@ -351,7 +351,7 @@ export default function RichTextEditor({ value, onChange, placeholder, rows = 6,
             <input
               ref={imageInputRef}
               type="file"
-              accept="image/webp"
+              accept="image/webp,.webp"
               className="hidden"
               onChange={handleImageUpload}
               disabled={uploadingImage}

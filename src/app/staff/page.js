@@ -5,27 +5,7 @@ import { useRouter } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import Pagination, { usePagination } from "@/components/Pagination";
 import useStatusToast from "@/hooks/useStatusToast";
-
-const PERMISSION_OPTIONS = [
-  { value: "banner", label: "Banner" },
-  { value: "offers", label: "Offers" },
-  { value: "trending", label: "Trending" },
-  { value: "pricing", label: "Region Pricing" },
-  { value: "destinations", label: "Popular Destinations" },
-  { value: "packages", label: "Packages" },
-  { value: "spiritual", label: "Spiritual Escape" },
-  { value: "about", label: "About Us" },
-  { value: "features", label: "Features" },
-  { value: "services", label: "Services" },
-  { value: "testimonials", label: "Testimonials" },
-  { value: "page-banners", label: "Page Banners" },
-  { value: "gallery", label: "Gallery" },
-  { value: "team-members", label: "Team Members" },
-  { value: "deals", label: "Deals" },
-  { value: "sections", label: "Homepage Sections" },
-  { value: "blog", label: "Blog" },
-  { value: "staff", label: "Staff Management" },
-];
+import { PERMISSION_OPTIONS, PERMISSION_LABELS } from "@/lib/permissions";
 
 export { PERMISSION_OPTIONS };
 

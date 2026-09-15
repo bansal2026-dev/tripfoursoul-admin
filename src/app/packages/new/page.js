@@ -93,7 +93,7 @@ function NewPackageContent() {
       clearSelectedFiles();
       return;
     }
-    if (files.some((file) => file.type !== "image/webp")) {
+    if (files.some((file) => file.type !== "image/webp" && !file.name.toLowerCase().endsWith(".webp"))) {
       notify("Upload failed: only WebP (.webp) images are accepted");
       clearSelectedFiles();
       return;
@@ -245,7 +245,7 @@ function NewPackageContent() {
                   ref={fileInputRef}
                   type="file"
                   multiple
-                  accept="image/webp"
+                  accept="image/webp,.webp"
                   onChange={handleImageUpload}
                   className="admin-input flex-1"
                   disabled={uploading || form.gallery_images.length >= MAX_PACKAGE_IMAGES}

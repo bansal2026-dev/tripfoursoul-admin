@@ -54,6 +54,11 @@ export default function BlogCategoriesPage() {
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    if (file.type !== "image/webp" && !file.name.toLowerCase().endsWith(".webp")) {
+      toast.error("Please upload only WebP (.webp) images.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
     setUploading(true);
     try {
       const formData = new FormData();
@@ -187,6 +192,7 @@ export default function BlogCategoriesPage() {
                 <label className="admin-label">Category Image *</label>
                 <div className="flex gap-2">
                   <input ref={fileInputRef} type="file" accept="image/jpeg,image/jpg,image/png,image/gif,image/webp" onChange={handleImageUpload} className="admin-input flex-1" disabled={uploading} />
+                  <input ref={fileInputRef} type="file" accept="image/webp,.webp" onChange={handleImageUpload} className="admin-input flex-1" disabled={uploading} />
                   <button type="button" onClick={() => fileInputRef.current?.click()} className="admin-btn-secondary text-xs whitespace-nowrap" disabled={uploading}>
                     {uploading ? "Uploading..." : "Upload Image"}
                   </button>

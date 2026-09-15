@@ -32,6 +32,11 @@ export default function EditTestimonialPage() {
   const uploadImage = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    if (file.type !== "image/webp" && !file.name.toLowerCase().endsWith(".webp")) {
+      setMessage("Please upload only WebP (.webp) images.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
     setUploading(true);
     try {
       const data = new FormData();
@@ -102,7 +107,7 @@ export default function EditTestimonialPage() {
               <div>
                 <label className="admin-label">Customer Image</label>
                 <div className="flex gap-2">
-                  <input ref={fileInputRef} type="file" accept="image/*" onChange={uploadImage} className="admin-input flex-1" disabled={uploading} />
+                  <input ref={fileInputRef} type="file" accept="image/webp,.webp" onChange={uploadImage} className="admin-input flex-1" disabled={uploading} />
                   <button type="button" onClick={() => fileInputRef.current?.click()} className="admin-btn-secondary" disabled={uploading}>
                     {uploading ? "Uploading..." : "Upload"}
                   </button>

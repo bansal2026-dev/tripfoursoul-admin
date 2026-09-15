@@ -172,7 +172,7 @@ export default function EditPackagePage() {
       clearSelectedFiles();
       return;
     }
-    if (files.some((file) => file.type !== "image/webp")) {
+    if (files.some((file) => file.type !== "image/webp" && !file.name.toLowerCase().endsWith(".webp"))) {
       notify("Upload failed: only WebP (.webp) images are accepted");
       clearSelectedFiles();
       return;
@@ -284,6 +284,11 @@ export default function EditPackagePage() {
   const uploadDestinationImage = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    if (file.type !== "image/webp" && !file.name.toLowerCase().endsWith(".webp")) {
+      notify("Upload failed: only WebP (.webp) images are accepted");
+      if (destinationFileInputRef.current) destinationFileInputRef.current.value = "";
+      return;
+    }
     setMessage("");
     setDestinationUploading(true);
     try {
@@ -471,7 +476,7 @@ export default function EditPackagePage() {
                   ref={fileInputRef}
                   type="file"
                   multiple
-                  accept="image/webp"
+                  accept="image/webp,.webp"
                   onChange={handleImageUpload}
                   className="admin-input flex-1"
                   disabled={uploading || form.gallery_images.length >= MAX_PACKAGE_IMAGES}
@@ -623,7 +628,7 @@ export default function EditPackagePage() {
                   <input
                     ref={destinationFileInputRef}
                     type="file"
-                    accept="image/webp"
+                    accept="image/webp,.webp"
                     onChange={uploadDestinationImage}
                     className="admin-input flex-1"
                     disabled={destinationUploading}

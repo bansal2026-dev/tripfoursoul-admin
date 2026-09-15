@@ -24,26 +24,23 @@ import {
 } from "lucide-react";
 
 const allMenuItems = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, permission: null },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, permission: "dashboard" },
   { href: "/homepage", label: "Homepage Settings", icon: Settings, permission: "homepage" },
   { href: "/offers", label: "Offers", icon: Tag, permission: "offers" },
   { href: "/leads", label: "Leads", icon: Inbox, permission: "leads" },
   { href: "/destinations", label: "Destinations", icon: MapPin, permission: "destinations" },
   { href: "/packages", label: "Packages", icon: Layers, permission: "packages" },
-  // { href: "/spiritual", label: "Spiritual Escape", icon: MapPin, permission: "spiritual" },
-  // { href: "/trending", label: "Trending Now", icon: TrendingUp, permission: "trending" },
-  { href: "/pricing", label: "Region Pricing", icon: DollarSign, permission: "pricing" },
-  { href: "/about", label: "About Us", icon: Info, permission: "about" },
-  { href: "/services", label: "Services", icon: Layers, permission: "services" },
+  // { href: "/pricing", label: "Region Pricing", icon: DollarSign, permission: "pricing" },
+  // { href: "/about", label: "About Us", icon: Info, permission: "about" },
+  // { href: "/services", label: "Services", icon: Layers, permission: "services" },
   { href: "/page-banners", label: "Page Banners", icon: Image, permission: "page-banners" },
   { href: "/gallery", label: "Gallery", icon: Image, permission: "gallery" },
-  { href: "/media", label: "Media Library", icon: Image, permission: null },
-  // { href: "/team-members", label: "Team Members", icon: Star, permission: "team-members" },
+  { href: "/media", label: "Media Library", icon: Image, permission: "media" },
   { href: "/blog", label: "Blog", icon: Layers, permission: "blog" },
-  { href: "/blog-categories", label: "Blog Categories", icon: Tag, permission: "blog" },
+  { href: "/blog-categories", label: "Blog Categories", icon: Tag, permission: "blog-categories" },
   { href: "/staff", label: "Staff", icon: Users, permission: "staff" },
   { href: "/social-media", label: "Social Media", icon: Share2, permission: "social-media" },
-  { href: "/profile", label: "My Profile", icon: UserCircle, permission: null },
+  { href: "/profile", label: "My Profile", icon: UserCircle, permission: "profile" },
 ];
 
 export default function Sidebar() {
@@ -70,7 +67,16 @@ export default function Sidebar() {
           return;
         }
         const perms = data.user.permissions || [];
-        setMenuItems(allMenuItems.filter((item) => !item.permission || perms.includes(item.permission)));
+        setMenuItems(
+          allMenuItems.filter((item) => {
+            if (item.href === "/profile") return true;
+            if (item.href === "/dashboard") return perms.includes("dashboard") || true;
+            if (item.permission === "blog-categories") {
+              return perms.includes("blog-categories") || perms.includes("blog");
+            }
+            return !item.permission || perms.includes(item.permission);
+          })
+        );
       })
       .catch(() => {
         setMenuItems(allMenuItems);

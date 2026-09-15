@@ -5,48 +5,58 @@ const PERMISSION_BY_PATH = [
   { prefix: '/dashboard', permission: null },
   { prefix: '/homepage', permission: 'homepage' },
   { prefix: '/offers', permission: 'offers' },
-  { prefix: '/banner', permission: 'banner' },
-  { prefix: '/trending', permission: 'trending' },
-  { prefix: '/pricing', permission: 'pricing' },
+  { prefix: '/leads', permission: 'leads' },
   { prefix: '/destinations', permission: 'destinations' },
   { prefix: '/packages', permission: 'packages' },
-  { prefix: '/spiritual', permission: 'spiritual' },
-  { prefix: '/about', permission: 'about' },
-  { prefix: '/features', permission: 'features' },
-  { prefix: '/services', permission: 'services' },
-  { prefix: '/testimonials', permission: 'testimonials' },
   { prefix: '/page-banners', permission: 'page-banners' },
   { prefix: '/gallery', permission: 'gallery' },
-  { prefix: '/team-members', permission: 'team-members' },
-  { prefix: '/deals', permission: 'deals' },
-  { prefix: '/sections', permission: 'sections' },
+  { prefix: '/media', permission: 'media' },
+  { prefix: '/blog-categories', permission: 'blog-categories' },
   { prefix: '/blog', permission: 'blog' },
   { prefix: '/staff', permission: 'staff' },
+  { prefix: '/social-media', permission: 'social-media' },
   { prefix: '/profile', permission: null },
+  // Consolidated legacy paths mapped to homepage
+  { prefix: '/banner', permission: 'homepage' },
+  { prefix: '/trending', permission: 'homepage' },
+  { prefix: '/pricing', permission: 'homepage' },
+  { prefix: '/about', permission: 'homepage' },
+  { prefix: '/features', permission: 'homepage' },
+  { prefix: '/services', permission: 'homepage' },
+  { prefix: '/testimonials', permission: 'homepage' },
+  { prefix: '/team-members', permission: 'homepage' },
+  { prefix: '/deals', permission: 'homepage' },
+  { prefix: '/sections', permission: 'homepage' },
 ];
 
 // API prefix -> permission key mapping
 const API_PERMISSION_BY_PATH = {
-  '/api/banner': 'banner',
+  '/api/homepage': 'homepage',
   '/api/offers': 'offers',
-  '/api/trending': 'trending',
-  '/api/trending/items': 'trending',
-  '/api/trending/toggle': 'trending',
-  '/api/pricing': 'pricing',
+  '/api/leads': 'leads',
   '/api/destinations': 'destinations',
   '/api/destination-packages': 'packages',
   '/api/packages': 'packages',
-  '/api/about': 'about',
-  '/api/features': 'features',
-  '/api/services': 'services',
-  '/api/testimonials': 'testimonials',
   '/api/page-banners': 'page-banners',
   '/api/gallery': 'gallery',
-  '/api/team-members': 'team-members',
-  '/api/deals': 'deals',
-  '/api/sections': 'sections',
+  '/api/media': 'media',
   '/api/blog': 'blog',
-  '/api/leads': 'leads',
+  '/api/blog-categories': 'blog-categories',
+  '/api/staff': 'staff',
+  '/api/auth/staff': 'staff',
+  '/api/social-media': 'social-media',
+  '/api/site-settings': 'social-media',
+  // Consolidated legacy routes
+  '/api/banner': 'homepage',
+  '/api/trending': 'homepage',
+  '/api/pricing': 'homepage',
+  '/api/about': 'homepage',
+  '/api/features': 'homepage',
+  '/api/services': 'homepage',
+  '/api/testimonials': 'homepage',
+  '/api/team-members': 'homepage',
+  '/api/deals': 'homepage',
+  '/api/sections': 'homepage',
 };
 
 // Decode JWT payload without verification (verification happens in the route handlers)
@@ -140,7 +150,12 @@ export function middleware(request) {
       if (apiPath) {
         const required = API_PERMISSION_BY_PATH[apiPath];
         const userPerms = payload.permissions || [];
-        if (!userPerms.includes(required)) {
+        if (
+          required === 'blog-categories' &&
+          (userPerms.includes('blog-categories') || userPerms.includes('blog'))
+        ) {
+          // allowed
+        } else if (!userPerms.includes(required)) {
           return NextResponse.json(
             { error: 'Forbidden: You do not have access to this section' },
             { status: 403 }
@@ -166,7 +181,12 @@ export function middleware(request) {
     // Staff: restrict pages based on permissions
     if (payload.role === 'staff') {
       // Dashboard and profile are accessible to all authenticated staff members
-      if (pathname === '/dashboard' || pathname.startsWith('/dashboard/')) {
+      if (
+        pathname === '/dashboard' ||
+        pathname.startsWith('/dashboard/') ||
+        pathname === '/profile' ||
+        pathname.startsWith('/profile/')
+      ) {
         return NextResponse.next();
       }
 
@@ -178,6 +198,13 @@ export function middleware(request) {
       let userPerms = payload.permissions || [];
       if (typeof userPerms === 'string') {
         try { userPerms = JSON.parse(userPerms); } catch { userPerms = []; }
+      }
+      if (
+        matched.permission === 'blog-categories' &&
+        Array.isArray(userPerms) &&
+        (userPerms.includes('blog-categories') || userPerms.includes('blog'))
+      ) {
+        return NextResponse.next();
       }
       if (!Array.isArray(userPerms) || !userPerms.includes(matched.permission)) {
         return NextResponse.redirect(new URL('/dashboard', request.url));

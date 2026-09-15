@@ -84,11 +84,13 @@ export async function GET() {
         CREATE TABLE IF NOT EXISTS banner_images (
           id SERIAL PRIMARY KEY,
           image_url TEXT NOT NULL,
+          mobile_image_url TEXT DEFAULT '',
           sort_order INT DEFAULT 0,
           is_active BOOLEAN DEFAULT true,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
       `);
+      try { await db.query(`ALTER TABLE banner_images ADD COLUMN IF NOT EXISTS mobile_image_url TEXT DEFAULT ''`); } catch (e) {}
 
       // Create trending_settings table
       await db.query(`

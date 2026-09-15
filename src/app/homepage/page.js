@@ -19,6 +19,7 @@ const TABS = [
 
 const emptyFeature = { icon: "", title: "", description: "", sort_order: 0 };
 const emptyTestimonial = { name: "", image_url: "", rating: 5, review: "", sort_order: 0, video_url: "", influencer_video_url: "" };
+const MAX_BANNER_IMAGES = 5;
 
 function HomepageSettingsPageContent() {
   const router = useRouter();
@@ -55,6 +56,8 @@ function HomepageSettingsPageContent() {
   const [newBannerImageUrl, setNewBannerImageUrl] = useState("");
   const [bannerUploading, setBannerUploading] = useState(false);
   const bannerFileInputRef = useRef(null);
+  const mobileBannerFileInputRef = useRef(null);
+  const [activeSlideForMedia, setActiveSlideForMedia] = useState(null);
 
   // About section image state
   const [aboutUploading, setAboutUploading] = useState(false);
@@ -62,15 +65,29 @@ function HomepageSettingsPageContent() {
 
   // Media Library Modal state
   const [showMediaLibrary, setShowMediaLibrary] = useState(false);
-  const [mediaTarget, setMediaTarget] = useState(null); // 'banner' | 'about' | 'testimonial'
+  const [mediaTarget, setMediaTarget] = useState(null); // 'banner' | 'banner_mobile' | 'about' | 'testimonial'
 
   const handleSelectMediaImage = (url) => {
     if (mediaTarget === "banner") {
+      if (bannerImages.length >= MAX_BANNER_IMAGES) {
+        showMessage(`Maximum ${MAX_BANNER_IMAGES} banner images allowed! Please delete an existing slide first.`, "error");
+        setShowMediaLibrary(false);
+        return;
+      }
       setBannerImages((prev) => [
         ...prev,
-        { id: "temp-" + Date.now(), image_url: url, isNew: true },
+        { id: "temp-" + Date.now(), image_url: url, mobile_image_url: "", isNew: true },
       ]);
-      showMessage("Image selected! Click 'Save Banner Images' to save to database.", "success");
+      showMessage(`Desktop image selected! (${bannerImages.length + 1}/${MAX_BANNER_IMAGES}) You can optionally add a mobile image below.`, "success");
+    } else if (mediaTarget === "banner_mobile" && activeSlideForMedia) {
+      setBannerImages((prev) =>
+        prev.map((img) =>
+          img.id === activeSlideForMedia
+            ? { ...img, mobile_image_url: url, isModified: true }
+            : img
+        )
+      );
+      showMessage("Mobile image selected! Click 'Save Banner Images' to save changes.", "success");
     } else if (mediaTarget === "about") {
       updateAboutField("image_url", url);
       showMessage("About image selected! Click 'Save About Settings' below to save to database.", "success");
@@ -79,6 +96,7 @@ function HomepageSettingsPageContent() {
       showMessage("Image selected from library!", "success");
     }
     setShowMediaLibrary(false);
+    setActiveSlideForMedia(null);
   };
 
   const showMessage = (msg, type = "success") => {
@@ -374,8 +392,14 @@ function HomepageSettingsPageContent() {
   };
 
   const handleTestimonialImageUpload = async (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files?.[0];
     if (!file) return;
+
+    if (file.type !== "image/webp" && !file.name.toLowerCase().endsWith(".webp")) {
+      showMessage("Only WebP (.webp) images are allowed! Kripya .webp image select karein.", "error");
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
 
     setUploading(true);
     try {
@@ -405,13 +429,94 @@ function HomepageSettingsPageContent() {
 
   // ============ BANNER IMAGES ============
   const handleBannerImageUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    const nonWebp = files.some(f => f.type !== "image/webp" && !f.name.toLowerCase().endsWith(".webp"));
+    if (nonWebp) {
+      showMessage("Only WebP (.webp) images are allowed! Kripya .webp image select karein.", "error");
+      if (bannerFileInputRef.current) bannerFileInputRef.current.value = "";
+      return;
+    }
+
+    const remainingSlots = MAX_BANNER_IMAGES - bannerImages.length;
+    if (remainingSlots <= 0) {
+      showMessage(`Maximum ${MAX_BANNER_IMAGES} banner images allowed! Please delete an existing slide first.`, "error");
+      if (bannerFileInputRef.current) bannerFileInputRef.current.value = "";
+      return;
+    }
+
+    const filesToUpload = files.slice(0, remainingSlots);
+    if (files.length > remainingSlots) {
+      showMessage(`Only ${remainingSlots} more image(s) can be added (limit ${MAX_BANNER_IMAGES}). Uploading ${filesToUpload.length}...`, "info");
+    }
+
+    setBannerUploading(true);
+    try {
+      const uploadedSlides = [];
+      for (const file of filesToUpload) {
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const res = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+        });
+
+        const data = await res.json();
+
+        if (res.ok && data.imageUrl) {
+          uploadedSlides.push({
+            id: "temp-" + Date.now() + "-" + Math.random().toString(36).substr(2, 5),
+            image_url: data.imageUrl,
+            mobile_image_url: "",
+            isNew: true,
+          });
+        }
+      }
+
+      if (uploadedSlides.length > 0) {
+        setBannerImages((prev) => [...prev, ...uploadedSlides]);
+        showMessage(`${uploadedSlides.length} desktop banner image(s) added! (${bannerImages.length + uploadedSlides.length}/${MAX_BANNER_IMAGES}). You can optionally attach mobile banners below.`, "success");
+      } else {
+        showMessage("Failed to upload image(s)", "error");
+      }
+    } catch (error) {
+      showMessage("Error uploading image(s)", "error");
+    } finally {
+      setBannerUploading(false);
+      if (bannerFileInputRef.current) bannerFileInputRef.current.value = "";
+    }
+  };
+
+  const triggerMobileUpload = (slideId) => {
+    setActiveSlideForMedia(slideId);
+    if (mobileBannerFileInputRef.current) {
+      mobileBannerFileInputRef.current.value = "";
+      mobileBannerFileInputRef.current.click();
+    }
+  };
+
+  const triggerMobileMediaLibrary = (slideId) => {
+    setActiveSlideForMedia(slideId);
+    setMediaTarget("banner_mobile");
+    setShowMediaLibrary(true);
+  };
+
+  const handleMobileBannerUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !activeSlideForMedia) return;
+
+    if (file.type !== "image/webp" && !file.name.toLowerCase().endsWith(".webp")) {
+      showMessage("Only WebP (.webp) images are allowed! Kripya .webp image select karein.", "error");
+      if (mobileBannerFileInputRef.current) mobileBannerFileInputRef.current.value = "";
+      return;
+    }
 
     setBannerUploading(true);
     try {
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append("file", file);
 
       const res = await fetch("/api/upload", {
         method: "POST",
@@ -421,26 +526,46 @@ function HomepageSettingsPageContent() {
       const data = await res.json();
 
       if (res.ok && data.imageUrl) {
-        setBannerImages((prev) => [
-          ...prev,
-          { id: "temp-" + Date.now(), image_url: data.imageUrl, isNew: true },
-        ]);
-        showMessage("Image uploaded! Click 'Save Banner Images' to save to database.", "success");
+        setBannerImages((prev) =>
+          prev.map((img) =>
+            img.id === activeSlideForMedia
+              ? { ...img, mobile_image_url: data.imageUrl, isModified: true }
+              : img
+          )
+        );
+        showMessage("Mobile banner image uploaded! Click 'Save Banner Images' to save.", "success");
       } else {
-        showMessage(data.error || "Failed to upload image", "error");
+        showMessage(data.error || "Failed to upload mobile image", "error");
       }
     } catch (error) {
-      showMessage("Error uploading image", "error");
+      showMessage("Error uploading mobile image", "error");
     } finally {
       setBannerUploading(false);
-      if (bannerFileInputRef.current) bannerFileInputRef.current.value = '';
+      if (mobileBannerFileInputRef.current) mobileBannerFileInputRef.current.value = "";
     }
+  };
+
+  const handleRemoveMobileImage = (slideId) => {
+    setBannerImages((prev) =>
+      prev.map((img) =>
+        img.id === slideId
+          ? { ...img, mobile_image_url: "", isModified: true }
+          : img
+      )
+    );
+    showMessage("Mobile image removed. Desktop image will be used for mobile.", "info");
   };
 
   // ============ ABOUT SECTION IMAGE ============
   const handleAboutImageUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (file.type !== "image/webp" && !file.name.toLowerCase().endsWith(".webp")) {
+      showMessage("Only WebP (.webp) images are allowed! Kripya .webp image select karein.", "error");
+      if (aboutFileInputRef.current) aboutFileInputRef.current.value = '';
+      return;
+    }
 
     setAboutUploading(true);
     try {
@@ -470,12 +595,16 @@ function HomepageSettingsPageContent() {
 
   const handleAddBannerImageUrl = () => {
     if (!newBannerImageUrl.trim()) return;
+    if (bannerImages.length >= MAX_BANNER_IMAGES) {
+      showMessage(`Maximum ${MAX_BANNER_IMAGES} banner images allowed! Please delete an existing slide first.`, "error");
+      return;
+    }
     setBannerImages((prev) => [
       ...prev,
-      { id: "temp-" + Date.now(), image_url: newBannerImageUrl.trim(), isNew: true },
+      { id: "temp-" + Date.now(), image_url: newBannerImageUrl.trim(), mobile_image_url: "", isNew: true },
     ]);
     setNewBannerImageUrl("");
-    showMessage("Image added! Click 'Save Banner Images' to save to database.", "success");
+    showMessage(`Image added! (${bannerImages.length + 1}/${MAX_BANNER_IMAGES}) Click 'Save Banner Images' to save to database.`, "success");
   };
 
   const handleDeleteBannerImage = (id) => {
@@ -500,7 +629,29 @@ function HomepageSettingsPageContent() {
             fetch("/api/banner/images", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ image_url: img.image_url, sort_order: bannerImages.length + idx }),
+              body: JSON.stringify({ 
+                image_url: img.image_url, 
+                mobile_image_url: img.mobile_image_url || "", 
+                sort_order: bannerImages.length + idx 
+              }),
+            })
+          )
+        );
+      }
+      const modifiedImages = bannerImages.filter((img) => !img.isNew && img.isModified);
+      if (modifiedImages.length > 0) {
+        await Promise.all(
+          modifiedImages.map((img) =>
+            fetch("/api/banner/images", {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                id: img.id,
+                image_url: img.image_url,
+                mobile_image_url: img.mobile_image_url || "",
+                sort_order: img.sort_order,
+                is_active: img.is_active !== false,
+              }),
             })
           )
         );
@@ -586,66 +737,217 @@ function HomepageSettingsPageContent() {
 
             {/* Banner Images */}
             <div className="admin-card">
-              <h2 className="text-lg font-semibold mb-4">Banner Images</h2>
-
-              {/* Add Image */}
-              <div className="space-y-3 mb-6">
-                <div className="flex gap-3">
-                  <input
-                    ref={bannerFileInputRef}
-                    type="file"
-                    accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
-                    onChange={handleBannerImageUpload}
-                    className="admin-input flex-1"
-                    disabled={bannerUploading}
-                  />
-                  <button
-                    onClick={() => bannerFileInputRef.current?.click()}
-                    className="admin-btn whitespace-nowrap"
-                    disabled={bannerUploading}
-                  >
-                    {bannerUploading ? "Uploading..." : "Upload from System"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setMediaTarget("banner"); setShowMediaLibrary(true); }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-teal-800 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100 transition-colors whitespace-nowrap shadow-sm"
-                    disabled={bannerUploading}
-                    title="Choose an existing image from uploaded library"
-                  >
-                    <svg className="w-3.5 h-3.5 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                    Choose from Uploaded
-                  </button>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+                <div className="flex items-center gap-2.5">
+                  <h2 className="text-lg font-semibold text-gray-900">Banner Images</h2>
+                  <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border ${
+                    bannerImages.length >= MAX_BANNER_IMAGES
+                      ? "bg-red-50 text-red-700 border-red-200"
+                      : "bg-teal-50 text-teal-700 border-teal-200"
+                  }`}>
+                    {bannerImages.length}/{MAX_BANNER_IMAGES} Slides
+                  </span>
                 </div>
-
-                <div className="flex gap-3">
-                  <input
-                    type="text"
-                    value={newBannerImageUrl}
-                    onChange={(e) => setNewBannerImageUrl(e.target.value)}
-                    placeholder="Or enter image URL"
-                    className="admin-input flex-1"
-                  />
-                  <button onClick={handleAddBannerImageUrl} className="admin-btn whitespace-nowrap">
-                    Add from URL
-                  </button>
-                </div>
+                <span className="text-xs text-gray-500">Upto {MAX_BANNER_IMAGES} slides allowed (Desktop & Mobile)</span>
               </div>
 
+              {/* Hidden file input for mobile banner image upload */}
+              <input
+                ref={mobileBannerFileInputRef}
+                type="file"
+                accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+                accept="image/webp,.webp"
+                onChange={handleMobileBannerUpload}
+                className="hidden"
+                disabled={bannerUploading}
+              />
+
+              {/* Add Image or Max Limit Reached Alert */}
+              {bannerImages.length >= MAX_BANNER_IMAGES ? (
+                <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 mb-6 text-xs text-amber-800 flex items-center gap-2.5">
+                  <span className="text-base">⚠️</span>
+                  <span>
+                    Maximum limit of <strong>{MAX_BANNER_IMAGES} banner slides</strong> reached ({bannerImages.length}/{MAX_BANNER_IMAGES}). To add a new desktop or mobile banner slide, please delete an existing slide below.
+                  </span>
+                </div>
+              ) : (
+                <div className="space-y-3 mb-6 p-4 rounded-xl bg-gray-50 border border-gray-200">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-gray-800">
+                      Add New Banner Slide ({bannerImages.length + 1} of {MAX_BANNER_IMAGES})
+                    </h3>
+                    <span className="text-xs text-gray-500">Select up to {MAX_BANNER_IMAGES - bannerImages.length} images at once</span>
+                  </div>
+                  <div className="flex flex-wrap gap-3">
+                    <input
+                      ref={bannerFileInputRef}
+                      type="file"
+                      multiple
+                      accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+                      accept="image/webp,.webp"
+                      onChange={handleBannerImageUpload}
+                      className="admin-input flex-1 min-w-[200px]"
+                      disabled={bannerUploading}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => bannerFileInputRef.current?.click()}
+                      className="admin-btn whitespace-nowrap"
+                      disabled={bannerUploading}
+                    >
+                      {bannerUploading ? "Uploading..." : "Upload Desktop Banner"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setMediaTarget("banner"); setShowMediaLibrary(true); }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-teal-800 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100 transition-colors whitespace-nowrap shadow-xs"
+                      disabled={bannerUploading}
+                      title="Choose an existing image from uploaded library"
+                    >
+                      <svg className="w-3.5 h-3.5 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      Choose from Uploaded
+                    </button>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <input
+                      type="text"
+                      value={newBannerImageUrl}
+                      onChange={(e) => setNewBannerImageUrl(e.target.value)}
+                      placeholder="Or enter desktop banner image URL"
+                      className="admin-input flex-1"
+                    />
+                    <button type="button" onClick={handleAddBannerImageUrl} className="admin-btn whitespace-nowrap">
+                      Add from URL
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Image List */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {bannerImages.map((img) => (
-                  <div key={img.id} className="relative group rounded-lg overflow-hidden border border-gray-200">
-                    <img src={img.image_url} alt="" className="w-full h-40 object-cover" />
-                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+              <div className="space-y-4">
+                {bannerImages.map((img, idx) => (
+                  <div key={img.id} className="rounded-xl border border-gray-200 bg-white p-4 shadow-xs">
+                    {/* Header */}
+                    <div className="flex items-center justify-between pb-3 mb-3 border-b border-gray-100">
+                      <div className="flex items-center gap-2">
+                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-teal-100 text-teal-800 text-xs font-bold">
+                          {idx + 1}
+                        </span>
+                        <span className="text-xs font-bold text-gray-800">Slide #{idx + 1}</span>
+                        {img.isNew && (
+                          <span className="text-[10px] font-semibold bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200">
+                            Unsaved New
+                          </span>
+                        )}
+                        {img.isModified && (
+                          <span className="text-[10px] font-semibold bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">
+                            Modified
+                          </span>
+                        )}
+                      </div>
                       <button
+                        type="button"
                         onClick={() => handleDeleteBannerImage(img.id)}
-                        className="admin-btn-danger text-sm"
+                        className="text-xs text-red-600 hover:text-red-800 font-medium px-2 py-1 rounded hover:bg-red-50 transition-colors"
                       >
-                        Delete
+                        Delete Slide
                       </button>
+                    </div>
+
+                    {/* Content Columns: Desktop Banner & Mobile Banner */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Desktop Column */}
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
+                            <span>🖥️ Desktop Banner</span>
+                            <span className="text-[10px] font-normal text-gray-400">(Default / Landscape)</span>
+                          </span>
+                          <span className="text-[10px] font-medium text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200">
+                            Required
+                          </span>
+                        </div>
+                        <div className="relative aspect-video w-full rounded-lg overflow-hidden border border-gray-200 bg-gray-100 group">
+                          <img src={img.image_url} alt="Desktop banner" className="w-full h-full object-cover" />
+                        </div>
+                      </div>
+
+                      {/* Mobile Column */}
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
+                            <span>📱 Mobile Banner</span>
+                            <span className="text-[10px] font-normal text-gray-400">(Mobile screens)</span>
+                          </span>
+                          {img.mobile_image_url ? (
+                            <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                              ✓ Custom Mobile Image
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                              Uses Desktop Image
+                            </span>
+                          )}
+                        </div>
+
+                        {img.mobile_image_url ? (
+                          <div className="relative aspect-video w-full rounded-lg overflow-hidden border border-emerald-300 bg-gray-100 group">
+                            <img src={img.mobile_image_url} alt="Mobile banner" className="w-full h-full object-cover" />
+                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => triggerMobileUpload(img.id)}
+                                className="px-2.5 py-1 text-xs bg-white text-gray-800 rounded font-semibold hover:bg-gray-100 shadow-sm"
+                              >
+                                Upload New
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => triggerMobileMediaLibrary(img.id)}
+                                className="px-2.5 py-1 text-xs bg-teal-600 text-white rounded font-semibold hover:bg-teal-700 shadow-sm"
+                              >
+                                Library
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveMobileImage(img.id)}
+                                className="px-2.5 py-1 text-xs bg-red-600 text-white rounded font-semibold hover:bg-red-700 shadow-sm"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="aspect-video w-full rounded-lg border-2 border-dashed border-gray-200 bg-gray-50/70 p-3 flex flex-col items-center justify-center text-center gap-1.5">
+                            <span className="text-xl">📱</span>
+                            <p className="text-xs font-medium text-gray-600">
+                              No mobile-specific banner set
+                            </p>
+                            <p className="text-[11px] text-gray-400 max-w-xs">
+                              Mobile devices will automatically display the desktop image. Upload a portrait image for better mobile look.
+                            </p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <button
+                                type="button"
+                                onClick={() => triggerMobileUpload(img.id)}
+                                className="px-2.5 py-1 text-xs font-semibold text-teal-800 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100 transition-colors shadow-xs"
+                              >
+                                + Upload Mobile Image
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => triggerMobileMediaLibrary(img.id)}
+                                className="px-2.5 py-1 text-xs font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors shadow-xs"
+                              >
+                                Choose from Uploaded
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -717,6 +1019,7 @@ function HomepageSettingsPageContent() {
                       ref={aboutFileInputRef}
                       type="file"
                       accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+                      accept="image/webp,.webp"
                       onChange={handleAboutImageUpload}
                       className="hidden"
                       disabled={aboutUploading}
@@ -932,6 +1235,7 @@ function HomepageSettingsPageContent() {
                         ref={fileInputRef}
                         type="file"
                         accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+                        accept="image/webp,.webp"
                         onChange={handleTestimonialImageUpload}
                         className="admin-input flex-1"
                         disabled={uploading}

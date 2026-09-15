@@ -5,6 +5,10 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
+    try {
+      await db.query(`ALTER TABLE banner_images ADD COLUMN IF NOT EXISTS mobile_image_url TEXT DEFAULT ''`);
+    } catch {}
+
     const settings = await db.query('SELECT * FROM banner_settings ORDER BY id ASC LIMIT 1');
     const images = await db.query('SELECT * FROM banner_images WHERE is_active = true');
     images.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));

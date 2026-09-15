@@ -92,7 +92,7 @@ export default function BlogContentManager({ blocks, onChange }) {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    if (file.type !== "image/webp") {
+    if (file.type !== "image/webp" && !file.name.toLowerCase().endsWith(".webp")) {
       setError("Only WebP images are allowed.");
       return;
     }
@@ -154,7 +154,7 @@ export default function BlogContentManager({ blocks, onChange }) {
             <div className="space-y-3">
               {block.imageUrl ? <img src={block.imageUrl} alt={block.caption || "Blog content"} className="max-h-80 w-full rounded-lg object-contain bg-gray-50" /> : null}
               <div className="flex flex-wrap gap-2">
-                <input ref={(node) => { imageInputRefs.current[block.id] = node; }} type="file" accept="image/webp" className="hidden" onChange={(event) => uploadImage(event, block.id)} />
+                <input ref={(node) => { imageInputRefs.current[block.id] = node; }} type="file" accept="image/webp,.webp" className="hidden" onChange={(event) => uploadImage(event, block.id)} />
                 <button type="button" onClick={() => imageInputRefs.current[block.id]?.click()} disabled={uploadingBlockId === block.id} className="admin-btn-secondary">
                   {uploadingBlockId === block.id ? "Uploading..." : block.imageUrl ? "Replace Image" : "Upload Image"}
                 </button>

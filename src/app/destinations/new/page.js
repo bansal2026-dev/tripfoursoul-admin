@@ -86,7 +86,7 @@ export default function NewDestinationPage() {
       clearSelectedFiles();
       return;
     }
-    if (files.some((file) => file.type !== "image/webp")) {
+    if (files.some((file) => file.type !== "image/webp" && !file.name.toLowerCase().endsWith(".webp"))) {
       notify("Upload failed: only WebP (.webp) images are accepted");
       clearSelectedFiles();
       return;
@@ -178,7 +178,7 @@ export default function NewDestinationPage() {
             <div className="md:col-span-2">
               <label className="admin-label">Destination Images *</label>
               <div className="flex gap-2">
-                <input ref={fileInputRef} type="file" multiple accept="image/webp" onChange={handleImageUpload} className="admin-input flex-1" disabled={uploading || form.gallery_images.length >= MAX_DESTINATION_IMAGES} />
+                <input ref={fileInputRef} type="file" multiple accept="image/webp,.webp" onChange={handleImageUpload} className="admin-input flex-1" disabled={uploading || form.gallery_images.length >= MAX_DESTINATION_IMAGES} />
                 <button type="button" onClick={() => fileInputRef.current?.click()} className="admin-btn-secondary text-xs whitespace-nowrap" disabled={uploading || form.gallery_images.length >= MAX_DESTINATION_IMAGES}>
                   {uploading ? "Uploading..." : "Upload"}
                 </button>
