@@ -11,9 +11,35 @@ export default function FeaturesPage() {
   const [features, setFeatures] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [editingFeature, setEditingFeature] = useState(null);
-  const [form, setForm] = useState({ icon: "", title: "", description: "", sort_order: 0 });
+  const [form, setForm] = useState({ icon: "", title: "", description: "", sort_order: 0, image_url: "" });
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useStatusToast();
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.type !== "image/webp" && !file.name.toLowerCase().endsWith(".webp")) {
+      setMessage("Only WebP (.webp) images are allowed! Kripya .webp image select karein.");
+      return;
+    }
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/upload", { method: "POST", body: formData });
+      const data = await res.json();
+      if (res.ok && data.imageUrl) {
+        setForm((prev) => ({ ...prev, image_url: data.imageUrl }));
+      } else {
+        setMessage(data.error || "Failed to upload image");
+      }
+    } catch {
+      setMessage("Error uploading image");
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const {
     currentItems: paginatedFeatures,
@@ -68,7 +94,7 @@ export default function FeaturesPage() {
         setMessage("Feature added successfully!");
       }
       setTimeout(() => setMessage(""), 3000);
-      setForm({ icon: "", title: "", description: "", sort_order: 0 });
+      setForm({ icon: "", title: "", description: "", sort_order: 0, image_url: "" });
       setShowForm(false);
       setEditingFeature(null);
       fetchFeatures();
@@ -92,10 +118,11 @@ export default function FeaturesPage() {
   const startEdit = (feature) => {
     setEditingFeature(feature);
     setForm({
-      icon: feature.icon,
-      title: feature.title,
-      description: feature.description,
+      icon: feature.icon || "",
+      title: feature.title || "",
+      description: feature.description || "",
       sort_order: feature.sort_order || 0,
+      image_url: feature.image_url || "",
     });
     setShowForm(true);
   };
@@ -159,6 +186,38 @@ export default function FeaturesPage() {
                 </div>
 
                 <div className="md:col-span-2">
+                  <label className="admin-label">Feature Image / Icon (WebP Image)</label>
+                  <div className="flex items-center gap-4 mt-1">
+                    {form.image_url ? (
+                      <div className="relative w-16 h-16 rounded-lg border border-gray-200 bg-white p-1 flex items-center justify-center">
+                        <img src={form.image_url} alt="Feature preview" className="w-full h-full object-contain rounded" />
+                        <button
+                          type="button"
+                          onClick={() => setForm((prev) => ({ ...prev, image_url: "" }))}
+                          className="absolute -top-1.5 -right-1.5 bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="w-16 h-16 rounded-lg border-2 border-dashed border-gray-300 bg-white flex items-center justify-center text-gray-400">
+                        <span className="text-xl">🖼️</span>
+                      </div>
+                    )}
+                    <div>
+                      <input
+                        type="file"
+                        accept="image/webp,.webp"
+                        onChange={handleImageUpload}
+                        disabled={uploading}
+                        className="text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Strictly WebP (.webp) format.</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="md:col-span-2">
                   <label className="admin-label">Description *</label>
                   <textarea 
                     value={form.description} 
@@ -188,6 +247,19 @@ export default function FeaturesPage() {
           <div className="space-y-3">
             {paginatedFeatures.map((feature) => (
               <div key={feature.id} className="flex items-start gap-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                {feature.image_url ? (
+                  <div className="w-14 h-14 rounded-lg border border-gray-200 bg-white p-1 shadow-xs flex items-center justify-center flex-shrink-0">
+                    <img
+                      src={feature.image_url}
+                      alt={feature.title}
+                      className="w-full h-full object-contain rounded"
+                    />
+                  </div>
+                ) : (
+                  <div className="w-14 h-14 rounded-lg border border-teal-200 bg-teal-50 flex items-center justify-center text-teal-700 flex-shrink-0 text-xl font-bold shadow-xs">
+                    ✨
+                  </div>
+                )}
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-2">
                     <h4 className="font-semibold text-gray-900">{feature.title}</h4>

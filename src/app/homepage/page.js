@@ -17,7 +17,7 @@ const TABS = [
   { id: "sections", label: "Sections" },
 ];
 
-const emptyFeature = { icon: "", title: "", description: "", sort_order: 0 };
+const emptyFeature = { icon: "", title: "", description: "", image_url: "", sort_order: 0 };
 const emptyTestimonial = { name: "", image_url: "", rating: 5, review: "", sort_order: 0, video_url: "", influencer_video_url: "" };
 const MAX_BANNER_IMAGES = 5;
 
@@ -40,6 +40,8 @@ function HomepageSettingsPageContent() {
   const [editingFeature, setEditingFeature] = useState(null);
   const [featureForm, setFeatureForm] = useState(emptyFeature);
   const [savingFeature, setSavingFeature] = useState(false);
+  const [featureUploading, setFeatureUploading] = useState(false);
+  const featureFileInputRef = useRef(null);
 
   // Testimonials state
   const [testimonials, setTestimonials] = useState([]);
@@ -65,7 +67,7 @@ function HomepageSettingsPageContent() {
 
   // Media Library Modal state
   const [showMediaLibrary, setShowMediaLibrary] = useState(false);
-  const [mediaTarget, setMediaTarget] = useState(null); // 'banner' | 'banner_mobile' | 'about' | 'testimonial'
+  const [mediaTarget, setMediaTarget] = useState(null); // 'banner' | 'banner_mobile' | 'about' | 'testimonial' | 'feature'
 
   const handleSelectMediaImage = (url) => {
     if (mediaTarget === "banner") {
@@ -94,6 +96,9 @@ function HomepageSettingsPageContent() {
     } else if (mediaTarget === "testimonial") {
       setTestimonialForm((prev) => ({ ...prev, image_url: url }));
       showMessage("Image selected from library!", "success");
+    } else if (mediaTarget === "feature") {
+      setFeatureForm((prev) => ({ ...prev, image_url: url }));
+      showMessage("Feature image selected from Media Library!", "success");
     }
     setShowMediaLibrary(false);
     setActiveSlideForMedia(null);
@@ -311,12 +316,49 @@ function HomepageSettingsPageContent() {
     }
   };
 
+  const handleFeatureImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.type !== "image/webp" && !file.name.toLowerCase().endsWith(".webp")) {
+      showMessage("Only WebP (.webp) images are allowed! Kripya .webp image select karein.", "error");
+      if (featureFileInputRef.current) featureFileInputRef.current.value = "";
+      return;
+    }
+
+    setFeatureUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.imageUrl) {
+        setFeatureForm((prev) => ({ ...prev, image_url: data.imageUrl }));
+        showMessage("Feature image uploaded successfully!", "success");
+      } else {
+        showMessage(data.error || "Failed to upload feature image", "error");
+      }
+    } catch (error) {
+      showMessage("Error uploading feature image", "error");
+    } finally {
+      setFeatureUploading(false);
+      if (featureFileInputRef.current) featureFileInputRef.current.value = "";
+    }
+  };
+
   const startFeatureEdit = (feature) => {
     setEditingFeature(feature);
     setFeatureForm({
-      icon: feature.icon,
-      title: feature.title,
-      description: feature.description,
+      icon: feature.icon || "",
+      title: feature.title || "",
+      description: feature.description || "",
+      image_url: feature.image_url || "",
       sort_order: feature.sort_order || 0,
     });
     setShowFeatureForm(true);
@@ -1079,40 +1121,46 @@ function HomepageSettingsPageContent() {
         {activeTab === "features" && (
           <div className="admin-card">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold">Features Management</h2>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Features Management</h2>
+                <p className="text-xs text-gray-500 mt-0.5">Manage key highlight features displayed on the homepage.</p>
+              </div>
               <button
-                onClick={() => router.push("/features/new")}
-                className="admin-btn"
+                type="button"
+                onClick={() => {
+                  if (showFeatureForm || editingFeature) {
+                    setShowFeatureForm(false);
+                    setEditingFeature(null);
+                  } else {
+                    setEditingFeature(null);
+                    setFeatureForm(emptyFeature);
+                    setShowFeatureForm(true);
+                  }
+                }}
+                className="admin-btn flex items-center gap-1.5"
               >
-                Add New Feature
+                {showFeatureForm || editingFeature ? "✕ Close Form" : "+ Add New Feature"}
               </button>
             </div>
 
             {/* Feature Add/Edit Form */}
             {(showFeatureForm || editingFeature) && (
-              <div className="bg-gray-50 p-6 rounded-lg mb-6 space-y-4">
-                <h3 className="text-lg font-semibold mb-4">{editingFeature ? "Edit Feature" : "Add New Feature"}</h3>
+              <div className="bg-gray-50 p-6 rounded-xl border border-gray-200 mb-6 space-y-4">
+                <div className="flex items-center justify-between border-b border-gray-200 pb-3">
+                  <h3 className="text-base font-bold text-gray-900">
+                    {editingFeature ? "Edit Feature" : "Add New Feature"}
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => { setShowFeatureForm(false); setEditingFeature(null); }}
+                    className="text-xs text-gray-500 hover:text-gray-700"
+                  >
+                    Cancel
+                  </button>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="admin-label">Icon Name *</label>
-                    <input
-                      type="text"
-                      value={featureForm.icon}
-                      onChange={(e) => setFeatureForm({ ...featureForm, icon: e.target.value })}
-                      className="admin-input"
-                      placeholder="e.g., best-price, easy-booking, support"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Use icon names like: best-price, easy-booking, support</p>
-                  </div>
-                  <div>
-                    <label className="admin-label">Sort Order</label>
-                    <input
-                      type="number"
-                      value={featureForm.sort_order}
-                      onChange={(e) => setFeatureForm({ ...featureForm, sort_order: parseInt(e.target.value) || 0 })}
-                      className="admin-input"
-                    />
-                  </div>
+                  {/* Title */}
                   <div className="md:col-span-2">
                     <label className="admin-label">Title *</label>
                     <input
@@ -1123,6 +1171,118 @@ function HomepageSettingsPageContent() {
                       placeholder="e.g., Best Price Guarantee"
                     />
                   </div>
+
+                  {/* Icon Name */}
+                  <div>
+                    <label className="admin-label">Icon Name (Key / Fallback)</label>
+                    <input
+                      type="text"
+                      value={featureForm.icon}
+                      onChange={(e) => setFeatureForm({ ...featureForm, icon: e.target.value })}
+                      className="admin-input"
+                      placeholder="e.g., best-price, easy-booking, support"
+                    />
+                    <p className="text-[11px] text-gray-500 mt-1">Preset keys: best-price, easy-booking, customer-care</p>
+                  </div>
+
+                  {/* Sort Order */}
+                  <div>
+                    <label className="admin-label">Sort Order</label>
+                    <input
+                      type="number"
+                      value={featureForm.sort_order}
+                      onChange={(e) => setFeatureForm({ ...featureForm, sort_order: parseInt(e.target.value) || 0 })}
+                      className="admin-input"
+                    />
+                  </div>
+
+                  {/* Feature Image Upload */}
+                  <div className="md:col-span-2 bg-white p-4 rounded-lg border border-gray-200">
+                    <label className="admin-label">Feature Image / Icon (WebP Image)</label>
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mt-1">
+                      {featureForm.image_url ? (
+                        <div className="relative w-16 h-16 rounded-lg border border-gray-200 bg-gray-50 p-1 shadow-xs flex items-center justify-center flex-shrink-0 group">
+                          <img
+                            src={featureForm.image_url}
+                            alt="Feature preview"
+                            className="w-full h-full object-contain rounded"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setFeatureForm((prev) => ({ ...prev, image_url: "" }))}
+                            className="absolute -top-1.5 -right-1.5 bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs shadow hover:bg-red-700 transition-colors"
+                            title="Remove image"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="w-16 h-16 rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 flex items-center justify-center text-gray-400 flex-shrink-0">
+                          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                        </div>
+                      )}
+
+                      <div className="flex-1 w-full space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <input
+                            ref={featureFileInputRef}
+                            type="file"
+                            accept="image/webp,.webp"
+                            onChange={handleFeatureImageUpload}
+                            className="hidden"
+                            disabled={featureUploading}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => featureFileInputRef.current?.click()}
+                            disabled={featureUploading}
+                            className="admin-btn text-xs flex items-center gap-1.5"
+                          >
+                            {featureUploading ? (
+                              <>
+                                <span className="animate-spin text-xs">⏳</span>
+                                <span>Uploading WebP...</span>
+                              </>
+                            ) : (
+                              <>
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                                </svg>
+                                <span>Upload WebP Image</span>
+                              </>
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMediaTarget("feature");
+                              setShowMediaLibrary(true);
+                            }}
+                            disabled={featureUploading}
+                            className="admin-btn-secondary text-xs flex items-center gap-1.5"
+                          >
+                            📁 Choose from Media Library
+                          </button>
+                          {featureForm.image_url && (
+                            <button
+                              type="button"
+                              onClick={() => setFeatureForm((prev) => ({ ...prev, image_url: "" }))}
+                              className="text-xs text-red-600 hover:text-red-700 font-medium px-2 py-1"
+                            >
+                              Remove Image
+                            </button>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-gray-500">
+                          Strictly WebP (.webp) format. Uploaded image will be displayed prominently on the homepage features section.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Description */}
                   <div className="md:col-span-2">
                     <label className="admin-label">Description *</label>
                     <textarea
@@ -1134,6 +1294,7 @@ function HomepageSettingsPageContent() {
                     />
                   </div>
                 </div>
+
                 <div className="flex gap-3 pt-2">
                   <button onClick={handleFeatureSave} disabled={savingFeature} className="admin-btn">
                     {savingFeature ? "Saving..." : editingFeature ? "Update Feature" : "Add Feature"}
@@ -1151,30 +1312,55 @@ function HomepageSettingsPageContent() {
             {/* Features List */}
             <div className="space-y-3">
               {features.slice().sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0)).map((feature) => (
-                <div key={feature.id} className="flex items-start gap-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <h4 className="font-semibold text-gray-900">{feature.title}</h4>
-                      <span className="text-xs text-gray-500">({feature.icon})</span>
+                <div key={feature.id} className="flex items-start gap-4 p-4 bg-gray-50 rounded-xl border border-gray-200 hover:border-gray-300 transition-colors">
+                  {/* Feature Image or Icon Thumbnail */}
+                  {feature.image_url ? (
+                    <div className="w-14 h-14 rounded-lg border border-gray-200 bg-white p-1 shadow-xs flex items-center justify-center flex-shrink-0">
+                      <img
+                        src={feature.image_url}
+                        alt={feature.title}
+                        className="w-full h-full object-contain rounded"
+                      />
                     </div>
-                    <p className="text-sm text-gray-600 mb-2">{feature.description}</p>
+                  ) : (
+                    <div className="w-14 h-14 rounded-lg border border-teal-200 bg-teal-50 flex items-center justify-center text-teal-700 flex-shrink-0 text-xl font-bold shadow-xs">
+                      ✨
+                    </div>
+                  )}
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h4 className="font-semibold text-gray-900 truncate">{feature.title}</h4>
+                      {feature.icon && (
+                        <span className="text-[11px] text-gray-500 font-mono bg-gray-100 px-1.5 py-0.5 rounded">
+                          {feature.icon}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-gray-600 line-clamp-2 mb-2">{feature.description}</p>
                     <p className="text-xs text-gray-400">Sort Order: {feature.sort_order || "—"}</p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-shrink-0">
                     <button
                       onClick={() => toggleFeaturePublish(feature)}
                       className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                         feature.is_active
-                          ? 'bg-green-50 text-green-600 hover:bg-green-100'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          ? 'bg-green-50 text-green-700 hover:bg-green-100 border border-green-200'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200 border border-gray-200'
                       }`}
                     >
                       {feature.is_active ? 'Published' : 'Unpublished'}
                     </button>
-                    <button onClick={() => router.push(`/features/${feature.id}`)} className="admin-btn-secondary text-xs px-3 py-1.5">
+                    <button
+                      onClick={() => startFeatureEdit(feature)}
+                      className="admin-btn-secondary text-xs px-3 py-1.5"
+                    >
                       Edit
                     </button>
-                    <button onClick={() => handleFeatureDelete(feature.id)} className="admin-btn-danger text-xs px-3 py-1.5">
+                    <button
+                      onClick={() => handleFeatureDelete(feature.id)}
+                      className="admin-btn-danger text-xs px-3 py-1.5"
+                    >
                       Delete
                     </button>
                   </div>

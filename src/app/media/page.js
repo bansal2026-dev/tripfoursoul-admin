@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo, useRef } from "react";
 import Sidebar from "@/components/Sidebar";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import ConfirmActionModal from "@/components/ConfirmActionModal";
+import Pagination, { usePagination } from "@/components/Pagination";
 import toast, { Toaster } from "react-hot-toast";
 
 export default function MediaPage() {
@@ -19,16 +20,26 @@ export default function MediaPage() {
   const [deleting, setDeleting] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState("");
   const [clientDims, setClientDims] = useState({});
+  const [isAdminOrSuperAdmin, setIsAdminOrSuperAdmin] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [viewMode, setViewMode] = useState("list"); // 'list' | 'grid'
   const fileInputRef = useRef(null);
+
+  // Multi-select state
+  const [selectedUrls, setSelectedUrls] = useState([]);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   // Check user role on mount
   useEffect(() => {
     fetch("/api/auth/me")
       .then((res) => res.json())
       .then((data) => {
-        if (data.user?.role === "super_admin") {
+        const role = data.user?.role;
+        if (role === "super_admin" || role === "admin") {
+          setIsAdminOrSuperAdmin(true);
+        }
+        if (role === "super_admin") {
           setIsSuperAdmin(true);
         }
       })
@@ -97,6 +108,52 @@ export default function MediaPage() {
     );
   }, [mediaList, activeTab, search]);
 
+  // Pagination hook (24 items per page)
+  const {
+    currentItems: paginatedMedia,
+    currentPage,
+    setCurrentPage,
+    totalItems,
+    itemsPerPage,
+  } = usePagination(filteredMedia, 24);
+
+  // Multi-select helpers
+  const toggleSelectUrl = (url, e) => {
+    if (e) e.stopPropagation();
+    setSelectedUrls((prev) =>
+      prev.includes(url) ? prev.filter((u) => u !== url) : [...prev, url]
+    );
+  };
+
+  const handleSelectAllPage = () => {
+    const pageUrls = paginatedMedia.map((m) => m.url);
+    const allSelected = pageUrls.length > 0 && pageUrls.every((u) => selectedUrls.includes(u));
+    if (allSelected) {
+      // Unselect all on this page
+      setSelectedUrls((prev) => prev.filter((u) => !pageUrls.includes(u)));
+    } else {
+      // Add all on this page
+      setSelectedUrls((prev) => Array.from(new Set([...prev, ...pageUrls])));
+    }
+  };
+
+  const handleSelectAllFiltered = () => {
+    const allFilteredUrls = filteredMedia.map((m) => m.url);
+    const allSelected = allFilteredUrls.length > 0 && allFilteredUrls.every((u) => selectedUrls.includes(u));
+    if (allSelected) {
+      setSelectedUrls([]);
+    } else {
+      setSelectedUrls(allFilteredUrls);
+    }
+  };
+
+  const handleClearSelection = () => {
+    setSelectedUrls([]);
+  };
+
+  const isAllPageSelected =
+    paginatedMedia.length > 0 && paginatedMedia.every((m) => selectedUrls.includes(m.url));
+
   const handleUpload = async (e) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
@@ -134,6 +191,7 @@ export default function MediaPage() {
       }
       if (successCount > 0) {
         toast.success(`Uploaded ${successCount} file(s) successfully!`);
+        setSelectedUrls([]);
         await fetchMedia();
       }
     } catch (err) {
@@ -152,10 +210,11 @@ export default function MediaPage() {
     setTimeout(() => setCopiedUrl(""), 2500);
   };
 
+  // Single file delete
   const confirmDelete = async () => {
     if (!deleteTarget) return;
-    if (!isSuperAdmin) {
-      toast.error("Only Super Admin can delete files!");
+    if (!isAdminOrSuperAdmin) {
+      toast.error("Only Admins can delete files!");
       setDeleteTarget(null);
       return;
     }
@@ -169,12 +228,45 @@ export default function MediaPage() {
       if (!res.ok) throw new Error(data.error || "Delete failed");
       toast.success("File deleted from server!");
       if (selectedMedia?.url === deleteTarget.url) setSelectedMedia(null);
+      setSelectedUrls((prev) => prev.filter((u) => u !== deleteTarget.url));
       await fetchMedia();
     } catch (err) {
       toast.error(err.message || "Failed to delete file");
     } finally {
       setDeleting(false);
       setDeleteTarget(null);
+    }
+  };
+
+  // Bulk delete
+  const confirmBulkDelete = async () => {
+    if (selectedUrls.length === 0) return;
+    if (!isAdminOrSuperAdmin) {
+      toast.error("Only Admins can delete files!");
+      setShowBulkDeleteModal(false);
+      return;
+    }
+
+    setBulkDeleting(true);
+    try {
+      const res = await fetch("/api/media", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ urls: selectedUrls }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Bulk delete failed");
+      toast.success(data.message || `Deleted ${selectedUrls.length} file(s) successfully!`);
+      if (selectedMedia && selectedUrls.includes(selectedMedia.url)) {
+        setSelectedMedia(null);
+      }
+      setSelectedUrls([]);
+      await fetchMedia();
+    } catch (err) {
+      toast.error(err.message || "Failed to delete files");
+    } finally {
+      setBulkDeleting(false);
+      setShowBulkDeleteModal(false);
     }
   };
 
@@ -202,14 +294,18 @@ export default function MediaPage() {
                 <span className="rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-semibold text-purple-800 flex items-center gap-1">
                   🛡️ Super Admin
                 </span>
+              ) : isAdminOrSuperAdmin ? (
+                <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-800 flex items-center gap-1">
+                  🛡️ Admin
+                </span>
               ) : (
                 <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600">
-                  Read Only (Delete restricted to Super Admin)
+                  Read Only (Delete restricted to Admin)
                 </span>
               )}
             </div>
             <p className="mt-1 text-sm text-gray-500">
-              Browse, search, and manage images and videos across the website.
+              Browse, search, select multiple items, and manage images and videos across the website.
             </p>
           </div>
 
@@ -244,7 +340,7 @@ export default function MediaPage() {
             <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl self-start">
               <button
                 type="button"
-                onClick={() => setActiveTab("all")}
+                onClick={() => { setActiveTab("all"); setCurrentPage(1); }}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                   activeTab === "all"
                     ? "bg-white text-gray-900 shadow-sm"
@@ -255,7 +351,7 @@ export default function MediaPage() {
               </button>
               <button
                 type="button"
-                onClick={() => setActiveTab("image")}
+                onClick={() => { setActiveTab("image"); setCurrentPage(1); }}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
                   activeTab === "image"
                     ? "bg-white text-gray-900 shadow-sm"
@@ -269,7 +365,7 @@ export default function MediaPage() {
               </button>
               <button
                 type="button"
-                onClick={() => setActiveTab("video")}
+                onClick={() => { setActiveTab("video"); setCurrentPage(1); }}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
                   activeTab === "video"
                     ? "bg-white text-gray-900 shadow-sm"
@@ -347,13 +443,72 @@ export default function MediaPage() {
               type="text"
               placeholder="Search files by name, type, or URL..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setCurrentPage(1);
+              }}
               className="admin-input pl-9 text-sm w-full"
             />
           </div>
         </div>
 
-        {/* Main Grid */}
+        {/* Multi-Select Bulk Actions Toolbar */}
+        {selectedUrls.length > 0 && (
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-teal-50 border border-teal-200 p-3.5 shadow-sm animate-in fade-in duration-150">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-teal-700 text-xs font-bold text-white shadow-xs">
+                {selectedUrls.length}
+              </span>
+              <span className="text-sm font-semibold text-teal-950">
+                {selectedUrls.length} {selectedUrls.length === 1 ? "file" : "files"} selected
+              </span>
+              <div className="h-4 w-[1px] bg-teal-200 hidden sm:block" />
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <button
+                  type="button"
+                  onClick={handleSelectAllPage}
+                  className="text-teal-700 hover:text-teal-900 font-semibold underline-offset-2 hover:underline"
+                >
+                  {isAllPageSelected ? "Deselect Current Page" : `Select Page (${paginatedMedia.length})`}
+                </button>
+                <span className="text-teal-400">•</span>
+                <button
+                  type="button"
+                  onClick={handleSelectAllFiltered}
+                  className="text-teal-700 hover:text-teal-900 font-semibold underline-offset-2 hover:underline"
+                >
+                  {selectedUrls.length === filteredMedia.length ? "Deselect All" : `Select All Filtered (${filteredMedia.length})`}
+                </button>
+                <span className="text-teal-400">•</span>
+                <button
+                  type="button"
+                  onClick={handleClearSelection}
+                  className="text-gray-600 hover:text-gray-900 font-medium"
+                >
+                  Clear Selection
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {isAdminOrSuperAdmin && (
+                <button
+                  type="button"
+                  onClick={() => setShowBulkDeleteModal(true)}
+                  disabled={bulkDeleting}
+                  className="admin-btn-danger text-xs flex items-center gap-1.5 py-2 px-4 shadow-sm"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  <span>Delete Selected ({selectedUrls.length})</span>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Main View */}
         {loading ? (
           <div className="py-24 text-center">
             <LoadingSpinner text="Loading media files..." />
@@ -369,301 +524,366 @@ export default function MediaPage() {
             </p>
           </div>
         ) : viewMode === "list" ? (
-          <div className="admin-card overflow-x-auto shadow-sm border border-gray-200 rounded-xl bg-white">
-            <table className="w-full min-w-[850px] text-left text-sm">
-              <thead>
-                <tr className="border-b border-gray-200 bg-gray-50 text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  <th className="px-4 py-3 w-16 text-center">Preview</th>
-                  <th className="px-4 py-3">File Name</th>
-                  <th className="px-4 py-3">Type</th>
-                  <th className="px-4 py-3">Resolution</th>
-                  <th className="px-4 py-3">Size</th>
-                  <th className="px-4 py-3">Date Added</th>
-                  <th className="px-4 py-3">Source</th>
-                  <th className="px-4 py-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {filteredMedia.map((item) => {
-                  const isSelected = selectedMedia?.url === item.url;
-                  const isVideo = item.mediaType === "video";
-                  const pixels = getPixels(item);
-                  const ext = item.url.split(".").pop()?.split("?")[0]?.toUpperCase() || (isVideo ? "VIDEO" : "WEBP");
+          <div className="admin-card p-4 shadow-sm border border-gray-200 rounded-xl bg-white">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[900px] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-gray-50 text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    <th className="px-3 py-3 w-10 text-center">
+                      <input
+                        type="checkbox"
+                        aria-label="Select all on this page"
+                        checked={isAllPageSelected}
+                        onChange={handleSelectAllPage}
+                        className="w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
+                      />
+                    </th>
+                    <th className="px-4 py-3 w-16 text-center">Preview</th>
+                    <th className="px-4 py-3">File Name</th>
+                    <th className="px-4 py-3">Type</th>
+                    <th className="px-4 py-3">Resolution</th>
+                    <th className="px-4 py-3">Size</th>
+                    <th className="px-4 py-3">Date Added</th>
+                    <th className="px-4 py-3">Source</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {paginatedMedia.map((item) => {
+                    const isChecked = selectedUrls.includes(item.url);
+                    const isDrawerSelected = selectedMedia?.url === item.url;
+                    const isVideo = item.mediaType === "video";
+                    const pixels = getPixels(item);
+                    const ext = item.url.split(".").pop()?.split("?")[0]?.toUpperCase() || (isVideo ? "VIDEO" : "WEBP");
 
-                  return (
-                    <tr
-                      key={item.url}
-                      onClick={() => setSelectedMedia(item)}
-                      className={`cursor-pointer transition-colors hover:bg-teal-50/40 ${
-                        isSelected ? "bg-teal-50/70" : ""
-                      }`}
-                    >
-                      {/* Thumbnail */}
-                      <td className="px-4 py-2.5 text-center">
-                        <div className="relative w-12 h-12 mx-auto rounded-lg overflow-hidden bg-gray-900 border border-gray-200 flex items-center justify-center flex-shrink-0 shadow-xs">
-                          {isVideo ? (
-                            <>
-                              <video src={item.url} className="w-full h-full object-cover opacity-80" />
-                              <span className="absolute inset-0 flex items-center justify-center text-white text-xs">▶</span>
-                            </>
-                          ) : (
-                            <img
-                              src={item.url}
-                              alt={item.name}
-                              loading="lazy"
-                              onLoad={(e) => {
-                                const w = e.currentTarget.naturalWidth;
-                                const h = e.currentTarget.naturalHeight;
-                                if (w && h && (!item.width || !item.height)) {
-                                  setClientDims((prev) => ({ ...prev, [item.url]: `${w} × ${h} px` }));
-                                }
-                              }}
-                              className="w-full h-full object-cover"
-                            />
-                          )}
-                        </div>
-                      </td>
+                    return (
+                      <tr
+                        key={item.url}
+                        onClick={() => setSelectedMedia(item)}
+                        className={`cursor-pointer transition-colors hover:bg-teal-50/40 ${
+                          isChecked
+                            ? "bg-teal-50/70 border-l-4 border-l-teal-600"
+                            : isDrawerSelected
+                            ? "bg-teal-50/40"
+                            : ""
+                        }`}
+                      >
+                        {/* Checkbox */}
+                        <td className="px-3 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            aria-label={`Select ${item.name || item.fileName}`}
+                            checked={isChecked}
+                            onChange={(e) => toggleSelectUrl(item.url, e)}
+                            className="w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
+                          />
+                        </td>
 
-                      {/* Name & URL */}
-                      <td className="px-4 py-2.5 max-w-xs">
-                        <p className="font-semibold text-gray-900 text-xs truncate" title={item.name || item.fileName}>
-                          {item.name || item.fileName}
-                        </p>
-                        <p className="text-[11px] font-mono text-gray-400 truncate mt-0.5" title={item.url}>
-                          {item.url}
-                        </p>
-                      </td>
-
-                      {/* Type Badge */}
-                      <td className="px-4 py-2.5 whitespace-nowrap">
-                        <span
-                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                            isVideo
-                              ? "bg-purple-100 text-purple-700"
-                              : "bg-teal-100 text-teal-800"
-                          }`}
-                        >
-                          {isVideo ? "🎬 Video" : "🖼️ Image"}
-                          <span className="text-[9px] uppercase opacity-75 font-mono">({ext})</span>
-                        </span>
-                      </td>
-
-                      {/* Resolution / Dimensions */}
-                      <td className="px-4 py-2.5 whitespace-nowrap text-xs font-mono">
-                        {pixels ? (
-                          <span className="inline-block bg-teal-50 text-teal-800 border border-teal-200 px-2 py-0.5 rounded text-[11px] font-semibold">
-                            {pixels}
-                          </span>
-                        ) : isVideo ? (
-                          <span className="text-gray-400 text-xs">—</span>
-                        ) : (
-                          <span className="text-gray-400 text-xs">—</span>
-                        )}
-                      </td>
-
-                      {/* File Size */}
-                      <td className="px-4 py-2.5 whitespace-nowrap text-xs text-gray-600 font-medium">
-                        {formatFileSize(item.size) || "—"}
-                      </td>
-
-                      {/* Date */}
-                      <td className="px-4 py-2.5 whitespace-nowrap text-xs text-gray-500">
-                        {formatDate(item.date || item.timestamp)}
-                      </td>
-
-                      {/* Source */}
-                      <td className="px-4 py-2.5 whitespace-nowrap">
-                        <span
-                          className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                            item.source === "upload"
-                              ? "bg-blue-50 text-blue-700 border border-blue-200"
-                              : "bg-amber-50 text-amber-700 border border-amber-200"
-                          }`}
-                        >
-                          {item.source === "upload" ? "Server File" : "DB Record"}
-                        </span>
-                      </td>
-
-                      {/* Actions */}
-                      <td className="px-4 py-2.5 whitespace-nowrap text-right">
-                        <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
-                          {/* Copy URL */}
-                          <button
-                            type="button"
-                            onClick={() => handleCopy(item.url)}
-                            className="p-1.5 text-gray-600 hover:text-teal-700 hover:bg-teal-50 rounded-lg transition-colors"
-                            title="Copy URL"
-                          >
-                            {copiedUrl === item.url ? (
-                              <span className="text-xs font-bold text-teal-700">✓ Copied</span>
+                        {/* Thumbnail */}
+                        <td className="px-4 py-2.5 text-center">
+                          <div className="relative w-12 h-12 mx-auto rounded-lg overflow-hidden bg-gray-900 border border-gray-200 flex items-center justify-center flex-shrink-0 shadow-xs">
+                            {isVideo ? (
+                              <>
+                                <video src={item.url} className="w-full h-full object-cover opacity-80" />
+                                <span className="absolute inset-0 flex items-center justify-center text-white text-xs">▶</span>
+                              </>
                             ) : (
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                              </svg>
+                              <img
+                                src={item.url}
+                                alt={item.name}
+                                loading="lazy"
+                                onLoad={(e) => {
+                                  const w = e.currentTarget.naturalWidth;
+                                  const h = e.currentTarget.naturalHeight;
+                                  if (w && h && (!item.width || !item.height)) {
+                                    setClientDims((prev) => ({ ...prev, [item.url]: `${w} × ${h} px` }));
+                                  }
+                                }}
+                                className="w-full h-full object-cover"
+                              />
                             )}
-                          </button>
+                          </div>
+                        </td>
 
-                          {/* View Details / Select */}
-                          <button
-                            type="button"
-                            onClick={() => setSelectedMedia(item)}
-                            className="p-1.5 text-gray-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
-                            title="Preview Details"
+                        {/* Name & URL */}
+                        <td className="px-4 py-2.5 max-w-xs">
+                          <p className="font-semibold text-gray-900 text-xs truncate" title={item.name || item.fileName}>
+                            {item.name || item.fileName}
+                          </p>
+                          <p className="text-[11px] font-mono text-gray-400 truncate mt-0.5" title={item.url}>
+                            {item.url}
+                          </p>
+                        </td>
+
+                        {/* Type Badge */}
+                        <td className="px-4 py-2.5 whitespace-nowrap">
+                          <span
+                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                              isVideo
+                                ? "bg-purple-100 text-purple-700"
+                                : "bg-teal-100 text-teal-800"
+                            }`}
                           >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                            </svg>
-                          </button>
+                            {isVideo ? "🎬 Video" : "🖼️ Image"}
+                            <span className="text-[9px] uppercase opacity-75 font-mono">({ext})</span>
+                          </span>
+                        </td>
 
-                          {/* Open in new tab */}
-                          <a
-                            href={item.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-1.5 text-gray-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition-colors"
-                            title="Open original file in new tab"
+                        {/* Resolution / Dimensions */}
+                        <td className="px-4 py-2.5 whitespace-nowrap text-xs font-mono">
+                          {pixels ? (
+                            <span className="inline-block bg-teal-50 text-teal-800 border border-teal-200 px-2 py-0.5 rounded text-[11px] font-semibold">
+                              {pixels}
+                            </span>
+                          ) : isVideo ? (
+                            <span className="text-gray-400 text-xs">—</span>
+                          ) : (
+                            <span className="text-gray-400 text-xs">—</span>
+                          )}
+                        </td>
+
+                        {/* File Size */}
+                        <td className="px-4 py-2.5 whitespace-nowrap text-xs text-gray-600 font-medium">
+                          {formatFileSize(item.size) || "—"}
+                        </td>
+
+                        {/* Date */}
+                        <td className="px-4 py-2.5 whitespace-nowrap text-xs text-gray-500">
+                          {formatDate(item.date || item.timestamp)}
+                        </td>
+
+                        {/* Source */}
+                        <td className="px-4 py-2.5 whitespace-nowrap">
+                          <span
+                            className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                              item.source === "upload"
+                                ? "bg-blue-50 text-blue-700 border border-blue-200"
+                                : "bg-amber-50 text-amber-700 border border-amber-200"
+                            }`}
                           >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                            </svg>
-                          </a>
+                            {item.source === "upload" ? "Server File" : "DB Record"}
+                          </span>
+                        </td>
 
-                          {/* Delete (Super Admin only) */}
-                          {isSuperAdmin && item.source === "upload" && (
+                        {/* Actions */}
+                        <td className="px-4 py-2.5 whitespace-nowrap text-right">
+                          <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                            {/* Copy URL */}
                             <button
                               type="button"
-                              onClick={() => setDeleteTarget(item)}
-                              className="p-1.5 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
-                              title="Delete file from server (Super Admin only)"
+                              onClick={() => handleCopy(item.url)}
+                              className="p-1.5 text-gray-600 hover:text-teal-700 hover:bg-teal-50 rounded-lg transition-colors"
+                              title="Copy URL"
+                            >
+                              {copiedUrl === item.url ? (
+                                <span className="text-xs font-bold text-teal-700">✓ Copied</span>
+                              ) : (
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                </svg>
+                              )}
+                            </button>
+
+                            {/* View Details / Select */}
+                            <button
+                              type="button"
+                              onClick={() => setSelectedMedia(item)}
+                              className="p-1.5 text-gray-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                              title="Preview Details"
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                               </svg>
                             </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+
+                            {/* Open in new tab */}
+                            <a
+                              href={item.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1.5 text-gray-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition-colors"
+                              title="Open original file in new tab"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                              </svg>
+                            </a>
+
+                            {/* Delete (Admin/Super Admin only) */}
+                            {isAdminOrSuperAdmin && item.source === "upload" && (
+                              <button
+                                type="button"
+                                onClick={() => setDeleteTarget(item)}
+                                className="p-1.5 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Delete file from server"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            <Pagination
+              currentPage={currentPage}
+              totalItems={totalItems}
+              itemsPerPage={itemsPerPage}
+              onPageChange={setCurrentPage}
+            />
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-            {filteredMedia.map((item) => {
-              const isSelected = selectedMedia?.url === item.url;
-              const isVideo = item.mediaType === "video";
-              const pixels = getPixels(item);
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+              {paginatedMedia.map((item) => {
+                const isChecked = selectedUrls.includes(item.url);
+                const isDrawerSelected = selectedMedia?.url === item.url;
+                const isVideo = item.mediaType === "video";
+                const pixels = getPixels(item);
 
-              return (
-                <div
-                  key={item.url}
-                  onClick={() => setSelectedMedia(item)}
-                  className={`group relative rounded-xl border overflow-hidden cursor-pointer bg-white transition-all flex flex-col ${
-                    isSelected
-                      ? "border-teal-600 ring-2 ring-teal-600/30 shadow-md"
-                      : "border-gray-200 hover:border-teal-300 hover:shadow-sm"
-                  }`}
-                >
-                  {/* Thumbnail / Video Container */}
-                  <div className="relative aspect-[4/3] w-full bg-gray-900 overflow-hidden flex items-center justify-center">
-                    {isVideo ? (
-                      <div className="relative w-full h-full flex items-center justify-center bg-gray-950">
-                        <video
-                          src={item.url}
-                          preload="metadata"
-                          muted
-                          className="w-full h-full object-cover opacity-80"
+                return (
+                  <div
+                    key={item.url}
+                    onClick={() => setSelectedMedia(item)}
+                    className={`group relative rounded-xl border overflow-hidden cursor-pointer bg-white transition-all flex flex-col ${
+                      isChecked
+                        ? "border-teal-600 ring-2 ring-teal-600 shadow-md bg-teal-50/20"
+                        : isDrawerSelected
+                        ? "border-teal-600 ring-2 ring-teal-600/40 shadow-sm"
+                        : "border-gray-200 hover:border-teal-300 hover:shadow-sm"
+                    }`}
+                  >
+                    {/* Checkbox overlay */}
+                    <div
+                      className="absolute top-2 left-2 z-10"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <label className="flex items-center justify-center w-6 h-6 rounded-md bg-white/95 backdrop-blur-xs border border-gray-300 shadow cursor-pointer hover:bg-white transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => toggleSelectUrl(item.url, e)}
+                          className="w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
                         />
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <div className="w-10 h-10 rounded-full bg-black/60 backdrop-blur-xs flex items-center justify-center text-white border border-white/20 shadow-md">
-                            ▶
+                      </label>
+                    </div>
+
+                    {/* Thumbnail / Video Container */}
+                    <div className="relative aspect-[4/3] w-full bg-gray-900 overflow-hidden flex items-center justify-center">
+                      {isVideo ? (
+                        <div className="relative w-full h-full flex items-center justify-center bg-gray-950">
+                          <video
+                            src={item.url}
+                            preload="metadata"
+                            muted
+                            className="w-full h-full object-cover opacity-80"
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="w-10 h-10 rounded-full bg-black/60 backdrop-blur-xs flex items-center justify-center text-white border border-white/20 shadow-md">
+                              ▶
+                            </div>
                           </div>
-                        </div>
-                        <span className="absolute top-1.5 left-1.5 bg-purple-900/90 text-purple-200 text-[9px] font-bold px-1.5 py-0.5 rounded shadow">
-                          VIDEO
-                        </span>
-                      </div>
-                    ) : (
-                      <>
-                        <img
-                          src={item.url}
-                          alt={item.name}
-                          loading="lazy"
-                          onLoad={(e) => {
-                            const w = e.currentTarget.naturalWidth;
-                            const h = e.currentTarget.naturalHeight;
-                            if (w && h && (!item.width || !item.height)) {
-                              setClientDims((prev) => ({ ...prev, [item.url]: `${w} × ${h} px` }));
-                            }
-                          }}
-                          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                        />
-                        {/* Pixel Badge Overlay */}
-                        {pixels && (
-                          <span className="absolute bottom-1.5 left-1.5 bg-black/75 text-white text-[9px] font-mono px-1.5 py-0.5 rounded shadow-sm backdrop-blur-xs pointer-events-none">
-                            {pixels}
+                          <span className="absolute top-2 right-2 bg-purple-900/90 text-purple-200 text-[9px] font-bold px-1.5 py-0.5 rounded shadow">
+                            VIDEO
                           </span>
-                        )}
-                      </>
-                    )}
+                        </div>
+                      ) : (
+                        <>
+                          <img
+                            src={item.url}
+                            alt={item.name}
+                            loading="lazy"
+                            onLoad={(e) => {
+                              const w = e.currentTarget.naturalWidth;
+                              const h = e.currentTarget.naturalHeight;
+                              if (w && h && (!item.width || !item.height)) {
+                                setClientDims((prev) => ({ ...prev, [item.url]: `${w} × ${h} px` }));
+                              }
+                            }}
+                            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                          />
+                          {/* Pixel Badge Overlay */}
+                          {pixels && (
+                            <span className="absolute bottom-1.5 left-1.5 bg-black/75 text-white text-[9px] font-mono px-1.5 py-0.5 rounded shadow-sm backdrop-blur-xs pointer-events-none">
+                              {pixels}
+                            </span>
+                          )}
+                        </>
+                      )}
 
-                    {/* Hover Actions */}
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 p-2">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleCopy(item.url);
-                        }}
-                        className="rounded-lg bg-white/90 p-1.5 text-gray-700 hover:bg-white text-xs font-semibold shadow"
-                        title="Copy URL"
-                      >
-                        {copiedUrl === item.url ? "✓" : "📋"}
-                      </button>
-
-                      {/* Super Admin only Delete button */}
-                      {isSuperAdmin && item.source === "upload" && (
+                      {/* Hover Actions */}
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 p-2">
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setDeleteTarget(item);
+                            handleCopy(item.url);
                           }}
-                          className="rounded-lg bg-red-600/90 p-1.5 text-white hover:bg-red-700 text-xs shadow"
-                          title="Delete from server (Super Admin only)"
+                          className="rounded-lg bg-white/90 p-1.5 text-gray-700 hover:bg-white text-xs font-semibold shadow"
+                          title="Copy URL"
                         >
-                          🗑️
+                          {copiedUrl === item.url ? "✓" : "📋"}
                         </button>
-                      )}
-                    </div>
-                  </div>
 
-                  {/* Card Meta Details */}
-                  <div className="p-2.5 flex flex-col gap-0.5">
-                    <p className="text-xs font-medium text-gray-800 truncate" title={item.name || item.fileName}>
-                      {item.name || item.fileName}
-                    </p>
-                    <div className="flex items-center justify-between text-[10px] text-gray-400">
-                      <span>{formatFileSize(item.size) || (item.source === "database" ? "DB Record" : "Upload")}</span>
-                      {isVideo ? (
-                        <span className="text-purple-600 font-semibold bg-purple-50 px-1 rounded border border-purple-200">
-                          Video
-                        </span>
-                      ) : pixels ? (
-                        <span className="text-teal-700 font-semibold bg-teal-50 px-1 rounded border border-teal-200">
-                          {pixels}
-                        </span>
-                      ) : (
-                        <span className="text-teal-600 font-medium">Image</span>
-                      )}
+                        {/* Admin/Super Admin Delete button */}
+                        {isAdminOrSuperAdmin && item.source === "upload" && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeleteTarget(item);
+                            }}
+                            className="rounded-lg bg-red-600/90 p-1.5 text-white hover:bg-red-700 text-xs shadow"
+                            title="Delete from server"
+                          >
+                            🗑️
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Card Meta Details */}
+                    <div className="p-2.5 flex flex-col gap-0.5">
+                      <p className="text-xs font-medium text-gray-800 truncate" title={item.name || item.fileName}>
+                        {item.name || item.fileName}
+                      </p>
+                      <div className="flex items-center justify-between text-[10px] text-gray-400">
+                        <span>{formatFileSize(item.size) || (item.source === "database" ? "DB Record" : "Upload")}</span>
+                        {isVideo ? (
+                          <span className="text-purple-600 font-semibold bg-purple-50 px-1 rounded border border-purple-200">
+                            Video
+                          </span>
+                        ) : pixels ? (
+                          <span className="text-teal-700 font-semibold bg-teal-50 px-1 rounded border border-teal-200">
+                            {pixels}
+                          </span>
+                        ) : (
+                          <span className="text-teal-600 font-medium">Image</span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
+
+            {/* Pagination in Grid View */}
+            <div className="admin-card p-4">
+              <Pagination
+                currentPage={currentPage}
+                totalItems={totalItems}
+                itemsPerPage={itemsPerPage}
+                onPageChange={setCurrentPage}
+              />
+            </div>
           </div>
         )}
 
@@ -742,29 +962,29 @@ export default function MediaPage() {
                 {copiedUrl === selectedMedia.url ? "Copied!" : "Copy URL"}
               </button>
 
-              {/* Super Admin Delete Button */}
-              {isSuperAdmin && selectedMedia.source === "upload" && (
+              {/* Admin/Super Admin Delete Button */}
+              {isAdminOrSuperAdmin && selectedMedia.source === "upload" && (
                 <button
                   type="button"
                   onClick={() => setDeleteTarget(selectedMedia)}
                   className="admin-btn-danger py-1.5 text-xs whitespace-nowrap"
-                  title="Super Admin Only"
+                  title="Delete from server"
                 >
                   Delete
                 </button>
               )}
             </div>
 
-            {!isSuperAdmin && selectedMedia.source === "upload" && (
+            {!isAdminOrSuperAdmin && selectedMedia.source === "upload" && (
               <p className="mt-2 text-[10px] text-gray-400 text-right">
-                🔒 Only Super Admin can delete files from server
+                🔒 Only Admins can delete files from server
               </p>
             )}
           </div>
         )}
       </main>
 
-      {/* Confirmation Modal - strictly for Super Admin */}
+      {/* Confirmation Modal - Single item */}
       <ConfirmActionModal
         open={Boolean(deleteTarget)}
         title="Delete Media File from Server?"
@@ -774,6 +994,18 @@ export default function MediaPage() {
         loading={deleting}
         onConfirm={confirmDelete}
         onCancel={() => setDeleteTarget(null)}
+      />
+
+      {/* Confirmation Modal - Bulk Delete */}
+      <ConfirmActionModal
+        open={showBulkDeleteModal}
+        title={`Delete ${selectedUrls.length} Selected Media File(s)?`}
+        description={`Are you sure you want to permanently delete these ${selectedUrls.length} file(s) from the server? Any website pages, tours, or banners using these images will no longer display them. This action cannot be undone.`}
+        confirmLabel={`Delete ${selectedUrls.length} File(s)`}
+        danger
+        loading={bulkDeleting}
+        onConfirm={confirmBulkDelete}
+        onCancel={() => setShowBulkDeleteModal(false)}
       />
     </div>
   );

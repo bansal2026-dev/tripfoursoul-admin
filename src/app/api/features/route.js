@@ -21,7 +21,7 @@ export async function GET(request) {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { icon, title, description, sort_order } = body;
+    const { icon, title, description, sort_order, image_url } = body;
 
     const featureSort = Number(sort_order) > 0 ? Number(sort_order) : await getNextSortOrder('features');
     if (featureSort > 0) {
@@ -31,7 +31,14 @@ export async function POST(request) {
       }
     }
 
-    const feature = await db.insert('features', { icon, title, description, sort_order: featureSort, is_active: true });
+    const feature = await db.insert('features', {
+      icon: icon || '',
+      title,
+      description,
+      image_url: image_url || '',
+      sort_order: featureSort,
+      is_active: true
+    });
     return NextResponse.json({ success: true, id: feature.id });
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -42,7 +49,7 @@ export async function POST(request) {
 export async function PUT(request) {
   try {
     const body = await request.json();
-    const { id, icon, title, description, is_active, sort_order } = body;
+    const { id, icon, title, description, is_active, sort_order, image_url } = body;
 
     const nextActive = is_active !== undefined ? Boolean(is_active) : true;
     const nextSortOrder = nextActive ? (Number(sort_order) || 0) : null;
@@ -54,7 +61,14 @@ export async function PUT(request) {
       }
     }
 
-    await db.update('features', id, { icon, title, description, is_active, sort_order: nextSortOrder });
+    const updateData = { is_active };
+    if (icon !== undefined) updateData.icon = icon;
+    if (title !== undefined) updateData.title = title;
+    if (description !== undefined) updateData.description = description;
+    if (image_url !== undefined) updateData.image_url = image_url;
+    if (sort_order !== undefined) updateData.sort_order = nextSortOrder;
+
+    await db.update('features', id, updateData);
 
     return NextResponse.json({ success: true });
   } catch (error) {

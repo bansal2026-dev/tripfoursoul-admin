@@ -154,43 +154,101 @@ export async function GET(request) {
 
 export async function DELETE(request) {
   try {
-    // STRICT SECURITY: Only Super Admin can delete media
+    // SECURITY: Only Admin or Super Admin can delete media
     const token = getTokenFromCookies(request);
     const payload = verifyToken(token);
 
-    if (!payload || payload.role !== 'super_admin') {
+    if (!payload || (payload.role !== 'admin' && payload.role !== 'super_admin')) {
       return NextResponse.json(
-        { error: 'Permission denied: Only Super Admin can delete media files' },
+        { error: 'Permission denied: Only Admin or Super Admin can delete media files' },
         { status: 403 }
       );
     }
 
-    const { searchParams } = new URL(request.url);
-    const filename = searchParams.get('filename') || '';
-    const fileUrl = searchParams.get('url') || '';
+    let urlsToDelete = [];
 
-    let targetFilename = filename;
-    if (!targetFilename && fileUrl.startsWith('/uploads/')) {
-      targetFilename = fileUrl.replace(/^\/uploads\//, '');
+    // 1. Check if request body contains an array of URLs
+    try {
+      const contentType = request.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const body = await request.json();
+        if (Array.isArray(body.urls) && body.urls.length > 0) {
+          urlsToDelete = body.urls;
+        } else if (body.url) {
+          urlsToDelete = [body.url];
+        }
+      }
+    } catch {
+      // Body parse error, fallback to searchParams
     }
 
-    if (!targetFilename) {
+    // 2. Fallback to URL searchParams
+    if (urlsToDelete.length === 0) {
+      const { searchParams } = new URL(request.url);
+      const filename = searchParams.get('filename') || '';
+      const fileUrl = searchParams.get('url') || '';
+      if (fileUrl) urlsToDelete.push(fileUrl);
+      else if (filename) urlsToDelete.push(`/uploads/${filename}`);
+    }
+
+    if (urlsToDelete.length === 0) {
       return NextResponse.json({ error: 'Filename or URL is required' }, { status: 400 });
     }
 
-    // Sanitize filename to prevent directory traversal
-    const safeFilename = path.basename(targetFilename);
     const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
-    const filePath = path.join(uploadsDir, safeFilename);
+    let deletedCount = 0;
+    let notFoundCount = 0;
 
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-      return NextResponse.json({ success: true, message: 'Media deleted successfully' });
+    for (const rawUrl of urlsToDelete) {
+      if (!rawUrl || typeof rawUrl !== 'string') continue;
+
+      let targetFilename = '';
+      if (rawUrl.startsWith('/uploads/')) {
+        targetFilename = rawUrl.replace(/^\/uploads\//, '');
+      } else if (rawUrl.includes('/uploads/')) {
+        const parts = rawUrl.split('/uploads/');
+        targetFilename = parts[parts.length - 1].split('?')[0];
+      } else if (!rawUrl.includes('/') && !rawUrl.startsWith('data:')) {
+        targetFilename = rawUrl;
+      }
+
+      if (targetFilename) {
+        const safeFilename = path.basename(targetFilename);
+        const filePath = path.join(uploadsDir, safeFilename);
+
+        if (fs.existsSync(filePath)) {
+          try {
+            fs.unlinkSync(filePath);
+            deletedCount++;
+          } catch (unlinkErr) {
+            console.error(`Failed to delete file ${filePath}:`, unlinkErr);
+          }
+        } else {
+          notFoundCount++;
+        }
+      }
+
+      // Also clean up any banner_images entry matching this URL
+      try {
+        await db.query('DELETE FROM banner_images WHERE image_url = $1', [rawUrl]);
+      } catch {
+        // Safe to ignore if table doesn't exist
+      }
     }
 
-    return NextResponse.json({ error: 'File not found on server' }, { status: 404 });
+    if (deletedCount === 0 && notFoundCount > 0 && urlsToDelete.length === 1) {
+      return NextResponse.json({ error: 'File not found on server' }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: `Successfully deleted ${deletedCount} file(s).`,
+      deletedCount,
+      notFoundCount,
+      totalRequested: urlsToDelete.length,
+    });
   } catch (error) {
-    console.error('Error deleting media file:', error);
-    return NextResponse.json({ error: 'Failed to delete file' }, { status: 500 });
+    console.error('Error deleting media file(s):', error);
+    return NextResponse.json({ error: 'Failed to delete file(s)' }, { status: 500 });
   }
 }
