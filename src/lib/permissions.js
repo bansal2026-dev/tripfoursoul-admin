@@ -1,5 +1,6 @@
 export const PERMISSION_OPTIONS = [
   { value: "dashboard", label: "Dashboard" },
+  { value: "analytics", label: "Analytics" },
   { value: "homepage", label: "Homepage Settings" },
   { value: "offers", label: "Offers" },
   { value: "leads", label: "Leads" },

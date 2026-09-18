@@ -18,6 +18,7 @@ import {
   LogOut,
   Share2,
   UserCircle,
+  BarChart3,
   Inbox,
   Menu,
   X,
@@ -25,6 +26,7 @@ import {
 
 const allMenuItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, permission: "dashboard" },
+  { href: "/analytics", label: "Analytics", icon: BarChart3, permission: "analytics" },
   { href: "/homepage", label: "Homepage Settings", icon: Settings, permission: "homepage" },
   { href: "/offers", label: "Offers", icon: Tag, permission: "offers" },
   { href: "/leads", label: "Leads", icon: Inbox, permission: "leads" },

@@ -488,3 +488,64 @@ CREATE TABLE IF NOT EXISTS gallery_images (
   is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Visitor Tracking & Analytics
+CREATE TABLE IF NOT EXISTS visitor_sessions (
+  id SERIAL PRIMARY KEY,
+  session_id VARCHAR(100) UNIQUE NOT NULL,
+  visitor_id VARCHAR(100) NOT NULL,
+  ip_address VARCHAR(100),
+  user_agent TEXT,
+  browser VARCHAR(100),
+  os VARCHAR(100),
+  device_type VARCHAR(50) DEFAULT 'desktop',
+  screen_resolution VARCHAR(50),
+  country VARCHAR(100) DEFAULT '',
+  city VARCHAR(100) DEFAULT '',
+  region VARCHAR(100) DEFAULT '',
+  country_code VARCHAR(10) DEFAULT '',
+  referrer TEXT,
+  referrer_domain VARCHAR(255),
+  utm_source VARCHAR(100),
+  utm_medium VARCHAR(100),
+  utm_campaign VARCHAR(100),
+  first_page VARCHAR(500),
+  last_page VARCHAR(500),
+  total_pages INT DEFAULT 1,
+  duration_seconds INT DEFAULT 0,
+  cookie_consent VARCHAR(50) DEFAULT 'essential',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_visitor_sessions_vid ON visitor_sessions(visitor_id);
+CREATE INDEX IF NOT EXISTS idx_visitor_sessions_created ON visitor_sessions(created_at);
+
+CREATE TABLE IF NOT EXISTS visitor_pageviews (
+  id SERIAL PRIMARY KEY,
+  session_id VARCHAR(100) NOT NULL,
+  visitor_id VARCHAR(100) NOT NULL,
+  page_path VARCHAR(500) NOT NULL,
+  page_title VARCHAR(255),
+  referrer VARCHAR(500),
+  duration_seconds INT DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_visitor_pageviews_sid ON visitor_pageviews(session_id);
+CREATE INDEX IF NOT EXISTS idx_visitor_pageviews_path ON visitor_pageviews(page_path);
+CREATE INDEX IF NOT EXISTS idx_visitor_pageviews_created ON visitor_pageviews(created_at);
+
+CREATE TABLE IF NOT EXISTS visitor_events (
+  id SERIAL PRIMARY KEY,
+  session_id VARCHAR(100) NOT NULL,
+  visitor_id VARCHAR(100) NOT NULL,
+  event_name VARCHAR(100) NOT NULL,
+  event_data JSONB,
+  page_path VARCHAR(500),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_visitor_events_sid ON visitor_events(session_id);
+CREATE INDEX IF NOT EXISTS idx_visitor_events_name ON visitor_events(event_name);
+CREATE INDEX IF NOT EXISTS idx_visitor_events_created ON visitor_events(created_at);

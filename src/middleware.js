@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 // Path prefix -> permission key mapping for admin pages (dashboard and profile accessible to all)
 const PERMISSION_BY_PATH = [
   { prefix: '/dashboard', permission: null },
+  { prefix: '/analytics', permission: 'analytics' },
   { prefix: '/homepage', permission: 'homepage' },
   { prefix: '/offers', permission: 'offers' },
   { prefix: '/leads', permission: 'leads' },
@@ -105,6 +106,7 @@ export function middleware(request) {
     pathname === '/api/auth/reset-password' ||
     pathname === '/api/setup' ||
     pathname === '/api/seed' ||
+    pathname === '/api/analytics/track' ||
     pathname.startsWith('/uploads/')
   ) {
     return NextResponse.next();
