@@ -141,10 +141,8 @@ export default function AllVisitorsPage() {
   // Export to CSV
   const exportToCSV = () => {
     if (!visitors.length) return;
-    const headers = ["IP Address", "Visitor ID", "Country", "City", "Device", "OS", "Browser", "Landed Page", "Last Page", "Total Pages", "Duration (s)", "Referrer", "Timestamp"];
     const headers = ["Visitor ID", "Country", "City", "Device", "OS", "Browser", "Landed Page", "Last Page", "Total Pages", "Duration (s)", "Referrer", "Timestamp"];
     const rows = visitors.map(v => [
-      `"${v.ip_address || ''}"`,
       `"${v.visitor_id || ''}"`,
       `"${v.country || ''}"`,
       `"${v.city || ''}"`,
@@ -300,22 +298,9 @@ export default function AllVisitorsPage() {
                     <tr key={v.id} className="hover:bg-slate-50/70 transition-colors">
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-1.5">
-                          <span className="font-mono text-xs font-semibold text-slate-800">
-                            {v.ip_address || "127.0.0.1"}
                           <span className="font-mono text-xs font-semibold text-slate-800" title={v.visitor_id}>
                             {v.visitor_id ? `${v.visitor_id.substring(0, 12)}...` : `Visitor #${v.id}`}
                           </span>
-                          <button
-                            onClick={() => copyToClipboard(v.ip_address || "127.0.0.1", `ip_${v.id}`)}
-                            className="text-slate-400 hover:text-slate-600 p-0.5"
-                            title="Copy IP"
-                          >
-                            {copiedId === `ip_${v.id}` ? (
-                              <Check className="w-3 h-3 text-emerald-600" />
-                            ) : (
-                              <Copy className="w-3 h-3" />
-                            )}
-                          </button>
                           {v.visitor_id && (
                             <button
                               onClick={() => copyToClipboard(v.visitor_id, `vis_${v.id}`)}
@@ -330,8 +315,6 @@ export default function AllVisitorsPage() {
                             </button>
                           )}
                         </div>
-                        <div className="text-[11px] text-slate-400 truncate max-w-[120px]" title={v.visitor_id}>
-                          ID: {v.visitor_id ? v.visitor_id.substring(0, 10) + "..." : "-"}
                         <div className="text-[11px] text-slate-400 truncate max-w-[140px]" title={v.session_id}>
                           Session: {v.session_id ? v.session_id.substring(0, 10) + "..." : "-"}
                         </div>
