@@ -142,6 +142,7 @@ export default function AllVisitorsPage() {
   const exportToCSV = () => {
     if (!visitors.length) return;
     const headers = ["IP Address", "Visitor ID", "Country", "City", "Device", "OS", "Browser", "Landed Page", "Last Page", "Total Pages", "Duration (s)", "Referrer", "Timestamp"];
+    const headers = ["Visitor ID", "Country", "City", "Device", "OS", "Browser", "Landed Page", "Last Page", "Total Pages", "Duration (s)", "Referrer", "Timestamp"];
     const rows = visitors.map(v => [
       `"${v.ip_address || ''}"`,
       `"${v.visitor_id || ''}"`,
@@ -270,6 +271,7 @@ export default function AllVisitorsPage() {
               <thead className="bg-slate-50 text-slate-600 uppercase text-[11px] tracking-wider border-b border-slate-100">
                 <tr>
                   <th className="py-3.5 px-4">Visitor & IP</th>
+                  <th className="py-3.5 px-4">Visitor ID</th>
                   <th className="py-3.5 px-4">Location</th>
                   <th className="py-3.5 px-4">Device & Browser</th>
                   <th className="py-3.5 px-4">Landed Page / Views</th>
@@ -300,6 +302,8 @@ export default function AllVisitorsPage() {
                         <div className="flex items-center gap-1.5">
                           <span className="font-mono text-xs font-semibold text-slate-800">
                             {v.ip_address || "127.0.0.1"}
+                          <span className="font-mono text-xs font-semibold text-slate-800" title={v.visitor_id}>
+                            {v.visitor_id ? `${v.visitor_id.substring(0, 12)}...` : `Visitor #${v.id}`}
                           </span>
                           <button
                             onClick={() => copyToClipboard(v.ip_address || "127.0.0.1", `ip_${v.id}`)}
@@ -312,9 +316,24 @@ export default function AllVisitorsPage() {
                               <Copy className="w-3 h-3" />
                             )}
                           </button>
+                          {v.visitor_id && (
+                            <button
+                              onClick={() => copyToClipboard(v.visitor_id, `vis_${v.id}`)}
+                              className="text-slate-400 hover:text-slate-600 p-0.5"
+                              title="Copy Visitor ID"
+                            >
+                              {copiedId === `vis_${v.id}` ? (
+                                <Check className="w-3 h-3 text-emerald-600" />
+                              ) : (
+                                <Copy className="w-3 h-3" />
+                              )}
+                            </button>
+                          )}
                         </div>
                         <div className="text-[11px] text-slate-400 truncate max-w-[120px]" title={v.visitor_id}>
                           ID: {v.visitor_id ? v.visitor_id.substring(0, 10) + "..." : "-"}
+                        <div className="text-[11px] text-slate-400 truncate max-w-[140px]" title={v.session_id}>
+                          Session: {v.session_id ? v.session_id.substring(0, 10) + "..." : "-"}
                         </div>
                         <div className="mt-1">
                           <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium border ${
@@ -444,6 +463,10 @@ export default function AllVisitorsPage() {
                       <div>
                         <span className="text-slate-400 block font-medium">IP Address</span>
                         <span className="font-mono font-bold text-slate-800">{sessionDetail.session?.ip_address}</span>
+                        <span className="text-slate-400 block font-medium">Visitor ID</span>
+                        <span className="font-mono font-bold text-slate-800 truncate block" title={sessionDetail.session?.visitor_id}>
+                          {sessionDetail.session?.visitor_id ? `${sessionDetail.session?.visitor_id.substring(0, 14)}...` : '-'}
+                        </span>
                       </div>
                       <div>
                         <span className="text-slate-400 block font-medium">Location</span>

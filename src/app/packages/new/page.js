@@ -72,7 +72,15 @@ function NewPackageContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...form, image_url: coverImage, gallery_images: form.gallery_images, ...priceFields }),
       });
-      const data = await response.json();
+      let data = {};
+      try {
+        data = await response.json();
+      } catch {
+        if (response.status === 413) throw new Error("Request payload is too large for the server (Nginx client_max_body_size limit exceeded).");
+        if (response.status === 401) throw new Error("Session expired or unauthorized. Please refresh and log in again.");
+        if (response.status === 502 || response.status === 504) throw new Error("Server temporary gateway error (502/504). Please try again in a few moments.");
+        throw new Error(`Server returned HTML response instead of JSON (Status ${response.status}).`);
+      }
       if (!response.ok) throw new Error(data.error || "Unable to save package");
       router.replace(`/packages/${data.id}`);
     } catch (error) { notify(error.message); }

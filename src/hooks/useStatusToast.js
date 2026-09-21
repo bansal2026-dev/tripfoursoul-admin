@@ -3,7 +3,10 @@
 import { useCallback, useState } from "react";
 import toast from "react-hot-toast";
 
-const isErrorMessage = (message) => /\b(error|failed|failure|cannot|can't|could not|unable|required|invalid|not found)\b/i.test(message);
+const isErrorMessage = (message) =>
+  /\b(error|failed|failure|cannot|can't|could not|unable|required|invalid|not found|unexpected|token|syntax|exception|denied|forbidden|unauthorized)\b/i.test(message) ||
+  String(message).includes("<") ||
+  String(message).toLowerCase().includes("not valid json");
 
 // Drop-in replacement for useState("") used by existing admin status banners.
 // Any non-empty status message is also surfaced through the app-wide toaster.

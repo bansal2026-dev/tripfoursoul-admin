@@ -66,8 +66,7 @@ export default function NewOfferPage() {
       const res = await fetch("/api/offers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, publish_duration_days: publishDurationOption === "custom" ? form.custom_publish_duration_days : publishDurationOption }),
-      });
+        body: JSON.stringify({ ...form, publish_duration_days: publishDurationOption === "custom" ? form.custom_publish_duration_days : publishDurationOption }), });
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || "Could not save offer");
       router.replace(`/offers/${result.offer.id}`);

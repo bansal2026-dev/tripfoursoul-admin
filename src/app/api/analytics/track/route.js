@@ -1,27 +1,8 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
 
-// In-memory cache for IP Geo lookups (to prevent redundant lookups)
-const geoCache = new Map();
-
-// Helper to determine if IP is private/local
-const isPrivateIp = (ip) => {
-  if (!ip) return true;
-  return (
-    ip === '127.0.0.1' ||
-    ip === '::1' ||
-    ip === 'localhost' ||
-    ip.startsWith('192.168.') ||
-    ip.startsWith('10.') ||
-    ip.startsWith('172.16.') ||
-    ip.startsWith('172.31.') ||
-    ip.startsWith('fe80:')
-  );
-};
-
-// Lightweight GeoIP resolver
-const resolveGeo = async (ip, reqHeaders) => {
-  // 1. Check Cloudflare / Vercel headers first
+// Lightweight non-PII Geo resolver (using coarse edge CDN headers only; NO IP lookup)
+const resolveGeo = (reqHeaders) => {
   const cloudCountry = reqHeaders.get('cf-ipcountry') || reqHeaders.get('x-vercel-ip-country') || reqHeaders.get('x-country');
   const cloudCity = reqHeaders.get('x-vercel-ip-city') || reqHeaders.get('cf-ipcity');
   const cloudRegion = reqHeaders.get('x-vercel-ip-country-region') || reqHeaders.get('x-region');
@@ -33,51 +14,6 @@ const resolveGeo = async (ip, reqHeaders) => {
       region: cloudRegion ? decodeURIComponent(cloudRegion) : '',
       countryCode: cloudCountry,
     };
-  }
-
-  if (isPrivateIp(ip)) {
-    return {
-      country: 'Local Network',
-      city: 'Development',
-      region: 'Local',
-      countryCode: 'DEV',
-    };
-  }
-
-  // 2. Check in-memory cache
-  if (geoCache.has(ip)) {
-    return geoCache.get(ip);
-  }
-
-  // 3. Fallback to free ip-api lookup with short timeout
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2000);
-    const res = await fetch(`http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,country,countryCode,regionName,city`, {
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-
-    if (res.ok) {
-      const data = await res.json();
-      if (data && data.status === 'success') {
-        const geo = {
-          country: data.country || 'Unknown',
-          city: data.city || '',
-          region: data.regionName || '',
-          countryCode: data.countryCode || '',
-        };
-        // Cache for 1 hour
-        geoCache.set(ip, geo);
-        if (geoCache.size > 2000) {
-          const firstKey = geoCache.keys().next().value;
-          geoCache.delete(firstKey);
-        }
-        return geo;
-      }
-    }
-  } catch (err) {
-    // Non-blocking geo failure
   }
 
   return { country: 'Unknown', city: '', region: '', countryCode: '' };
@@ -185,14 +121,9 @@ export async function POST(request) {
     }
 
     const reqHeaders = request.headers;
-    const rawIp = reqHeaders.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-                  reqHeaders.get('x-real-ip') ||
-                  reqHeaders.get('cf-connecting-ip') ||
-                  '127.0.0.1';
-
     const userAgent = reqHeaders.get('user-agent') || '';
     const { deviceType, os, browser } = parseUserAgent(userAgent);
-    const geo = await resolveGeo(rawIp, reqHeaders);
+    const geo = resolveGeo(reqHeaders);
     const { domain: referrerDomain, utm_source, utm_medium, utm_campaign } = parseReferrer(referrer, page_path);
 
     // Upsert session
@@ -216,7 +147,7 @@ export async function POST(request) {
         [page_path, newTotal, newDuration, cookie_consent, session_id]
       );
     } else {
-      // Create new session
+      // Create new session (no IP address is stored; privacy safe)
       await db.query(
         `INSERT INTO visitor_sessions 
          (session_id, visitor_id, ip_address, user_agent, browser, os, device_type, screen_resolution, 
@@ -227,7 +158,7 @@ export async function POST(request) {
         [
           session_id,
           visitor_id,
-          rawIp,
+          null, // ip_address is never captured or stored
           userAgent,
           browser,
           os,
@@ -275,4 +206,3 @@ export async function POST(request) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500, headers: CORS_HEADERS });
   }
 }
-

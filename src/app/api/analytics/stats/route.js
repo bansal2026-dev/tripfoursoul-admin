@@ -100,6 +100,7 @@ export async function GET(request) {
     // 8. Recent Visitor Activity Log (Last 50 sessions)
     const recentVisitors = await db.query(`
       SELECT id, session_id, visitor_id, ip_address, browser, os, device_type,
+      SELECT id, session_id, visitor_id, browser, os, device_type,
              country, city, region, country_code, referrer_domain, first_page, last_page,
              total_pages, duration_seconds, created_at
       FROM visitor_sessions

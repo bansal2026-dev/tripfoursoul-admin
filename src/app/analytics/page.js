@@ -395,6 +395,7 @@ export default function AnalyticsPage() {
               <thead className="bg-slate-50 text-slate-600 uppercase text-[11px] tracking-wider border-b border-slate-100">
                 <tr>
                   <th className="py-3 px-4">Visitor & IP</th>
+                  <th className="py-3 px-4">Visitor ID</th>
                   <th className="py-3 px-4">Location</th>
                   <th className="py-3 px-4">Device & Browser</th>
                   <th className="py-3 px-4">First / Last Page</th>
@@ -416,9 +417,13 @@ export default function AnalyticsPage() {
                       <td className="py-3 px-4">
                         <div className="font-mono text-xs font-semibold text-slate-800">
                           {v.ip_address || "127.0.0.1"}
+                        <div className="font-mono text-xs font-semibold text-slate-800" title={v.visitor_id}>
+                          {v.visitor_id ? `${v.visitor_id.substring(0, 12)}...` : `Visitor #${v.id}`}
                         </div>
                         <div className="text-[11px] text-slate-400 truncate max-w-[120px]" title={v.visitor_id}>
                           ID: {v.visitor_id ? v.visitor_id.substring(0, 8) + "..." : "-"}
+                        <div className="text-[11px] text-slate-400 truncate max-w-[140px]" title={v.session_id}>
+                          Session: {v.session_id ? v.session_id.substring(0, 8) + "..." : "-"}
                         </div>
                       </td>
                       <td className="py-3 px-4">
