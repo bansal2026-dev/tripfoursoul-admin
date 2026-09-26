@@ -242,13 +242,33 @@ export default function RichTextEditor({ value, onChange, placeholder, rows = 6,
     if (trimEmptyEdges(el.innerHTML) === "") el.innerHTML = "";
   };
 
+const stripUnwantedStyles = (html) => {
+  if (typeof html !== "string") return "";
+  return html
+    .replace(/\s*bgcolor=(["'])[\s\S]*?\1/gi, "")
+    .replace(/(?:^|;)\s*background(?:-color)?\s*:\s*[^;"]+;?/gi, "")
+    .replace(/(?:^|;)\s*font-family\s*:\s*[^;"]+;?/gi, "");
+};
+
+  const handlePaste = (e) => {
+    const clipboardData = e.clipboardData;
+    if (!clipboardData) return;
+    const html = clipboardData.getData("text/html");
+    if (html && /background(?:-color)?\s*:/i.test(html)) {
+      e.preventDefault();
+      const cleanHtml = stripUnwantedStyles(html);
+      document.execCommand("insertHTML", false, cleanHtml);
+      handleInput();
+    }
+  };
+
   // On blur, strip edge blank lines and normalize list margins before reporting
   // the value so the form (and the database) never keeps an extra empty line or
   // the 12pt gap the browser/paste left behind.
   const handleBlur = () => {
     const el = editorRef.current;
     if (!el) return;
-    const clean = trimEmptyEdges(normalizeListMargins(el.innerHTML));
+    const clean = stripUnwantedStyles(trimEmptyEdges(normalizeListMargins(el.innerHTML)));
     if (clean !== el.innerHTML) el.innerHTML = clean;
     onChange(clean);
   };
@@ -369,6 +389,7 @@ export default function RichTextEditor({ value, onChange, placeholder, rows = 6,
         suppressContentEditableWarning
         onInput={handleInput}
         onBlur={handleBlur}
+        onPaste={handlePaste}
         onKeyUp={updateActiveFormats}
         onMouseUp={updateActiveFormats}
         onFocus={() => { clearAutoScaffold(); updateActiveFormats(); }}
