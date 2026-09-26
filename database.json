@@ -154,17 +154,10 @@
       "id": 7
     },
     {
-      "section_key": "gallery",
-      "section_name": "Gallery",
-      "is_visible": 1,
-      "sort_order": 8,
-      "id": 9
-    },
-    {
       "section_key": "footer",
       "section_name": "Footer",
       "is_visible": 1,
-      "sort_order": 9,
+      "sort_order": 8,
       "id": 8
     },
     {
@@ -172,7 +165,7 @@
       "section_key": "deals",
       "section_name": "Deals",
       "is_visible": 1,
-      "sort_order": 10
+      "sort_order": 9
     }
   ],
   "trips": [
