@@ -170,16 +170,51 @@ function HomepageSettingsPageContent() {
     }
   };
 
-  const toggleSection = (section) => {
+  const toggleSection = async (section) => {
+    const isCurrentlyVisible = Boolean(
+      section.is_visible === true ||
+      Number(section.is_visible) === 1 ||
+      section.is_visible === "true" ||
+      section.is_visible === "1"
+    );
+    const newVisible = !isCurrentlyVisible;
+
+    // Optimistic UI update
     setData((previous) => ({
       ...previous,
       sections: {
         ...previous.sections,
-        sections: previous.sections.sections.map((item) => item.id === section.id
-          ? { ...item, is_visible: item.is_visible ? 0 : 1 }
-          : item),
+        sections: (previous.sections?.sections || []).map((item) =>
+          item.id === section.id
+            ? { ...item, is_visible: newVisible }
+            : item
+        ),
       },
     }));
+
+    try {
+      const response = await fetch("/api/sections", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: section.id, is_visible: newVisible }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Could not update section visibility");
+      showMessage(`Section "${section.section_name}" is now ${newVisible ? "visible" : "hidden"}!`);
+      setSavedSections((prev) => {
+        try {
+          const arr = JSON.parse(prev || "[]");
+          return JSON.stringify(arr.map((item) =>
+            item.id === section.id ? { ...item, is_visible: newVisible } : item
+          ));
+        } catch {
+          return prev;
+        }
+      });
+    } catch (error) {
+      showMessage(error.message || "Could not update section visibility", "error");
+      fetchAllData();
+    }
   };
 
   const moveSection = (section, direction) => {
@@ -204,7 +239,18 @@ function HomepageSettingsPageContent() {
       const response = await fetch("/api/sections", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sections: sections.map((item, itemIndex) => ({ id: item.id, sort_order: itemIndex + 1, is_visible: item.is_visible })) }),
+        body: JSON.stringify({
+          sections: sections.map((item, itemIndex) => ({
+            id: item.id,
+            sort_order: itemIndex + 1,
+            is_visible: Boolean(
+              item.is_visible === true ||
+              Number(item.is_visible) === 1 ||
+              item.is_visible === "true" ||
+              item.is_visible === "1"
+            ),
+          })),
+        }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Could not save section changes");
@@ -1624,37 +1670,41 @@ function HomepageSettingsPageContent() {
             <h2 className="text-lg font-semibold mb-4">Homepage Sections Visibility</h2>
             <p className="text-sm text-gray-500 mb-4">Toggle visibility and use the arrows to change the section order.</p>
             <div className="space-y-3">
-              {[...(data.sections?.sections || [])].sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0)).map((section, index, orderedSections) => (
-                <div key={section.id} className={`flex items-center justify-between p-3 border rounded-lg ${section.is_visible ? "border-gray-200" : "border-gray-300 bg-gray-50 opacity-75"}`}>
-                  <div className="flex min-w-0 items-center gap-3">
-                    <div className="flex flex-col gap-1">
-                      <button type="button" disabled={index === 0} onClick={() => moveSection(section, -1)} className="rounded border border-gray-300 px-2 py-0.5 text-xs text-gray-600 hover:bg-white disabled:cursor-not-allowed disabled:opacity-30" aria-label={`Move ${section.section_name} up`}>▲</button>
-                      <button type="button" disabled={index === orderedSections.length - 1} onClick={() => moveSection(section, 1)} className="rounded border border-gray-300 px-2 py-0.5 text-xs text-gray-600 hover:bg-white disabled:cursor-not-allowed disabled:opacity-30" aria-label={`Move ${section.section_name} down`}>▼</button>
+              {[...(data.sections?.sections || [])].sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0)).map((section, index, orderedSections) => {
+                const isVis = Boolean(section.is_visible === true || Number(section.is_visible) === 1 || section.is_visible === "true" || section.is_visible === "1");
+                return (
+                  <div key={section.id} className={`flex items-center justify-between p-3 border rounded-lg ${isVis ? "border-gray-200" : "border-gray-300 bg-gray-50 opacity-75"}`}>
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="flex flex-col gap-1">
+                        <button type="button" disabled={index === 0} onClick={() => moveSection(section, -1)} className="rounded border border-gray-300 px-2 py-0.5 text-xs text-gray-600 hover:bg-white disabled:cursor-not-allowed disabled:opacity-30" aria-label={`Move ${section.section_name} up`}>▲</button>
+                        <button type="button" disabled={index === orderedSections.length - 1} onClick={() => moveSection(section, 1)} className="rounded border border-gray-300 px-2 py-0.5 text-xs text-gray-600 hover:bg-white disabled:cursor-not-allowed disabled:opacity-30" aria-label={`Move ${section.section_name} down`}>▼</button>
+                      </div>
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-teal-50 text-sm font-semibold text-teal-700">{index + 1}</span>
+                      <div className="min-w-0">
+                        <span className="font-medium">{section.section_name}</span>
+                        <span className="text-xs text-gray-500 ml-2">({section.section_key})</span>
+                        {isVis ? (
+                          <span className="ml-2 text-xs bg-green-100 text-green-700 px-2 py-1 rounded">Visible</span>
+                        ) : (
+                          <span className="ml-2 text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">Hidden</span>
+                        )}
+                      </div>
                     </div>
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-teal-50 text-sm font-semibold text-teal-700">{index + 1}</span>
-                  <div className="min-w-0">
-                    <span className="font-medium">{section.section_name}</span>
-                    <span className="text-xs text-gray-500 ml-2">({section.section_key})</span>
-                    {section.is_visible ? (
-                      <span className="ml-2 text-xs bg-green-100 text-green-700 px-2 py-1 rounded">Visible</span>
-                    ) : (
-                      <span className="ml-2 text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">Hidden</span>
-                    )}
+                    <div className="flex items-center gap-4">
+                      <label className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600">Visible</span>
+                        <button
+                          type="button"
+                          onClick={() => toggleSection(section)}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isVis ? "bg-teal-600" : "bg-gray-300"}`}
+                        >
+                          <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition ${isVis ? "translate-x-6" : "translate-x-1"}`} />
+                        </button>
+                      </label>
+                    </div>
                   </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <label className="flex items-center gap-2">
-                      <span className="text-sm text-gray-600">Visible</span>
-                      <button
-                        onClick={() => toggleSection(section)}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${section.is_visible ? "bg-teal-600" : "bg-gray-300"}`}
-                      >
-                        <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition ${section.is_visible ? "translate-x-6" : "translate-x-1"}`} />
-                      </button>
-                    </label>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
             <div className="mt-5 flex justify-end border-t border-gray-100 pt-5">
               <button

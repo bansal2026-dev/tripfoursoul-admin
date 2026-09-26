@@ -37,10 +37,18 @@ export async function PUT(request) {
     
     for (const section of sectionsToUpdate) {
       const updateData = {};
-      if (section.is_visible !== undefined) updateData.is_visible = section.is_visible;
+      if (section.is_visible !== undefined) {
+        updateData.is_visible = (
+          section.is_visible === true ||
+          section.is_visible === 1 ||
+          section.is_visible === '1' ||
+          section.is_visible === 'true'
+        );
+      }
       if (section.sort_order !== undefined) updateData.sort_order = Number(section.sort_order);
       if (section.section_name !== undefined) updateData.section_name = section.section_name;
       if (section.section_key !== undefined) updateData.section_key = section.section_key;
+      updateData.updated_at = new Date();
       await db.update('homepage_sections', section.id, updateData);
     }
     

@@ -27,15 +27,22 @@ export default function SectionsPage() {
 
   const toggleVisibility = async (section) => {
     try {
+      const isCurrentlyVisible = Boolean(
+        section.is_visible === true ||
+        Number(section.is_visible) === 1 ||
+        section.is_visible === "1" ||
+        section.is_visible === "true"
+      );
+      const newVisible = !isCurrentlyVisible;
       await fetch("/api/sections", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           id: section.id, 
-          is_visible: section.is_visible ? 0 : 1 
+          is_visible: newVisible 
         }),
       });
-      setMessage(`Section "${section.section_name}" ${section.is_visible ? 'hidden' : 'shown'} successfully!`);
+      setMessage(`Section "${section.section_name}" ${newVisible ? 'shown' : 'hidden'} successfully!`);
       setTimeout(() => setMessage(""), 3000);
       fetchSections();
     } catch (error) {
@@ -101,60 +108,68 @@ export default function SectionsPage() {
           </div>
 
           <div className="space-y-3">
-            {sections.map((section) => (
-              <div 
-                key={section.id} 
-                className={`flex items-center gap-4 p-4 rounded-lg border ${
-                  section.is_visible 
-                    ? 'bg-white border-gray-200' 
-                    : 'bg-gray-50 border-gray-300 opacity-75'
-                }`}
-              >
-                <div className="flex-1">
+            {sections.map((section) => {
+              const isVis = Boolean(
+                section.is_visible === true ||
+                Number(section.is_visible) === 1 ||
+                section.is_visible === "1" ||
+                section.is_visible === "true"
+              );
+              return (
+                <div 
+                  key={section.id} 
+                  className={`flex items-center gap-4 p-4 rounded-lg border ${
+                    isVis 
+                      ? 'bg-white border-gray-200' 
+                      : 'bg-gray-50 border-gray-300 opacity-75'
+                  }`}
+                >
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3">
+                      <h4 className="font-semibold text-gray-900">
+                        {section.section_name}
+                      </h4>
+                      <span className="text-xs text-gray-500 font-mono">
+                        ({section.section_key})
+                      </span>
+                      {isVis ? (
+                        <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
+                          Visible
+                        </span>
+                      ) : (
+                        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
+                          Hidden
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
                   <div className="flex items-center gap-3">
-                    <h4 className="font-semibold text-gray-900">
-                      {section.section_name}
-                    </h4>
-                    <span className="text-xs text-gray-500 font-mono">
-                      ({section.section_key})
-                    </span>
-                    {section.is_visible ? (
-                      <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
-                        Visible
-                      </span>
-                    ) : (
-                      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
-                        Hidden
-                      </span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm text-gray-600">Order:</label>
+                      <input 
+                        type="number" 
+                        value={section.sort_order} 
+                        onChange={(e) => updateSortOrder(section, e.target.value)}
+                        className="w-16 px-2 py-1 border border-gray-300 rounded text-sm"
+                        min="0"
+                      />
+                    </div>
+
+                    <button
+                      onClick={() => toggleVisibility(section)}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        isVis
+                          ? 'bg-red-50 text-red-600 hover:bg-red-100'
+                          : 'bg-green-50 text-green-600 hover:bg-green-100'
+                      }`}
+                    >
+                      {isVis ? 'Hide' : 'Show'}
+                    </button>
                   </div>
                 </div>
-
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-2">
-                    <label className="text-sm text-gray-600">Order:</label>
-                    <input 
-                      type="number" 
-                      value={section.sort_order} 
-                      onChange={(e) => updateSortOrder(section, e.target.value)}
-                      className="w-16 px-2 py-1 border border-gray-300 rounded text-sm"
-                      min="0"
-                    />
-                  </div>
-
-                  <button
-                    onClick={() => toggleVisibility(section)}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      section.is_visible
-                        ? 'bg-red-50 text-red-600 hover:bg-red-100'
-                        : 'bg-green-50 text-green-600 hover:bg-green-100'
-                    }`}
-                  >
-                    {section.is_visible ? 'Hide' : 'Show'}
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {sections.length === 0 && (
