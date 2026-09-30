@@ -7,16 +7,8 @@ import sharp from 'sharp';
 // Max file size (50 MB for videos/images)
 const MAX_SIZE = 50 * 1024 * 1024;
 
-// Allowed image types (auto-converted to clean WebP via Sharp)
-const ALLOWED_IMAGE_TYPES = [
-  'image/webp',
-  'image/jpeg',
-  'image/png',
-  'image/gif',
-  'image/avif',
-  'image/bmp',
-  'image/svg+xml',
-];
+// Allowed image types: ONLY WebP is allowed!
+const ALLOWED_IMAGE_TYPES = ['image/webp'];
 // Allowed video types
 const ALLOWED_VIDEO_TYPES = [
   'video/mp4',
@@ -251,12 +243,12 @@ export async function POST(request) {
     const isVideo = fileType.startsWith('video/') || /\.(mp4|webm|ogg|mov|mkv|m4v)$/i.test(fileName);
     const isImage = fileType.startsWith('image/') || /\.(webp|jpg|jpeg|png|gif|avif|bmp|svg)$/i.test(fileName) || !isVideo;
 
-    // Allow any standard image format; Sharp converts it to clean WebP below
+    // Reject non-webp images strictly
     if (isImage) {
-      const isValidImage = ALLOWED_IMAGE_TYPES.includes(fileType) || /\.(webp|jpe?g|png|gif|avif|bmp|svg)$/i.test(fileName);
-      if (!isValidImage) {
+      const isWebp = fileType === 'image/webp' || fileName.endsWith('.webp');
+      if (!isWebp) {
         return NextResponse.json(
-          { error: 'Invalid image format. Allowed: WebP, JPEG, PNG, GIF, AVIF.' },
+          { error: 'Only WebP images (.webp) are allowed! Sirf WebP format ki image upload ho sakti hai.' },
           { status: 400 }
         );
       }
