@@ -85,8 +85,8 @@ export default function EditOfferPage() {
   const uploadImage = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    if (file.type !== "image/webp" && !file.name.toLowerCase().endsWith(".webp")) {
-      notify("Please upload only WebP (.webp) images.");
+    if (!file.type.startsWith("image/") && !/\.(jpe?g|png|webp|avif|gif)$/i.test(file.name)) {
+      notify("Please upload a valid image file (WebP, PNG, JPEG).");
       if (inputRef.current) inputRef.current.value = "";
       return;
     }
@@ -234,8 +234,7 @@ export default function EditOfferPage() {
           <div>
             <span className="admin-label">Offer image</span>
             <div className="flex flex-wrap gap-3">
-              <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={uploadImage} className="admin-input max-w-md" disabled={uploading} />
-              <input ref={inputRef} type="file" accept="image/webp,.webp" onChange={uploadImage} className="admin-input max-w-md" disabled={uploading} />
+              <input ref={inputRef} type="file" accept="image/*" onChange={uploadImage} className="admin-input max-w-md" disabled={uploading} />
               <button
                 type="button"
                 onClick={() => setShowMediaLibrary(true)}
