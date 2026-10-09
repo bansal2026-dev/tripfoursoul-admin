@@ -36,9 +36,9 @@ export default function EditDestinationPage() {
     let active = true;
     (async () => {
       try {
-        const res = await fetch(`/api/destinations?all=true`);
+        const res = await fetch(`/api/destinations?all=true&id=${id}`);
         const data = await res.json();
-        const dest = (data.destinations || []).find((d) => d.id === Number(id));
+        const dest = (data.destinations || [])[0];
         if (active && dest) {
           const { currency, value } = priceFromRecord(dest);
           let gallery = dest.gallery_images;

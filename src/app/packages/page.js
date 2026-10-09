@@ -36,7 +36,7 @@ function PackagesPageContent() {
     let active = true;
     const fetchPackages = async (retry = 0) => {
       try {
-        const packagesResponse = await fetch(`/api/packages?all=true${selectedDestinationId ? `&destination_id=${selectedDestinationId}` : ""}`);
+        const packagesResponse = await fetch(`/api/packages?all=true&summary=true${selectedDestinationId ? `&destination_id=${selectedDestinationId}` : ""}`);
         const packagesData = await packagesResponse.json();
         if (!packagesResponse.ok) {
           if (retry < 1 && active) {
@@ -60,7 +60,7 @@ function PackagesPageContent() {
   }, [selectedDestinationId]);
 
   const loadData = async () => {
-    const response = await fetch(`/api/packages?all=true${selectedDestinationId ? `&destination_id=${selectedDestinationId}` : ""}`);
+    const response = await fetch(`/api/packages?all=true&summary=true${selectedDestinationId ? `&destination_id=${selectedDestinationId}` : ""}`);
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "Could not load packages");
     setPackages(data.packages || []);

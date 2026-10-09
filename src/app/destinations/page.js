@@ -28,7 +28,7 @@ export default function DestinationsPage() {
   const fetchDestinations = async (showLoader = false) => {
     if (showLoader) setLoading(true);
     try {
-      const res = await fetch("/api/destinations?all=true");
+      const res = await fetch("/api/destinations?all=true&summary=true");
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not load destinations");
       setDestinations(data.destinations || []);

@@ -337,12 +337,14 @@ export async function GET() {
           description TEXT DEFAULT '',
           image_url TEXT DEFAULT '',
           icon VARCHAR(100) DEFAULT '',
+          price VARCHAR(100) DEFAULT '',
           sort_order INT DEFAULT 0,
           is_active BOOLEAN DEFAULT true,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
       `);
+      await db.query("ALTER TABLE services ADD COLUMN IF NOT EXISTS price VARCHAR(100) DEFAULT ''");
 
       // Create testimonials table
       await db.query(`
@@ -379,6 +381,8 @@ export async function GET() {
           image_url TEXT DEFAULT '',
           region VARCHAR(100) DEFAULT '',
           price VARCHAR(50) DEFAULT '',
+          quote_cta_text VARCHAR(100) DEFAULT 'Get a Quote',
+          price_display_label VARCHAR(100) DEFAULT 'per person / twin share',
           duration VARCHAR(100) DEFAULT '',
           highlights TEXT,
           is_trending BOOLEAN DEFAULT false,
@@ -417,7 +421,18 @@ export async function GET() {
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
       `);
-      try { await db.query('ALTER TABLE packages ADD COLUMN IF NOT EXISTS gallery_images JSONB'); } catch (e) {}
+      await db.query('ALTER TABLE packages DROP COLUMN IF EXISTS landing_content');
+      await db.query('ALTER TABLE packages ADD COLUMN IF NOT EXISTS gallery_images JSONB');
+      await db.query("ALTER TABLE packages ADD COLUMN IF NOT EXISTS quote_cta_text VARCHAR(100) DEFAULT 'Get a Quote'");
+      await db.query("ALTER TABLE packages ADD COLUMN IF NOT EXISTS price_display_label VARCHAR(100) DEFAULT 'per person / twin share'");
+      await db.query('DROP TABLE IF EXISTS package_services');
+      await db.query(`CREATE TABLE IF NOT EXISTS package_related_packages (
+        package_id INTEGER NOT NULL REFERENCES packages(id) ON DELETE CASCADE,
+        related_package_id INTEGER NOT NULL REFERENCES packages(id) ON DELETE CASCADE,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (package_id, related_package_id),
+        CHECK (package_id <> related_package_id)
+      )`);
 
       // Create page_banners table
       await db.query(`
@@ -590,6 +605,17 @@ export async function GET() {
         ['leads', 'offer_duration_days', 'INTEGER'],
         ['leads', 'service_type', "VARCHAR(100) DEFAULT ''"],
         ['leads', 'source_page', "VARCHAR(500) DEFAULT ''"],
+        ['leads', 'selected_package', "VARCHAR(255) DEFAULT ''"],
+        ['leads', 'landing_url', 'TEXT DEFAULT \'\''],
+        ['leads', 'utm_source', "VARCHAR(255) DEFAULT ''"],
+        ['leads', 'utm_medium', "VARCHAR(255) DEFAULT ''"],
+        ['leads', 'utm_campaign', "VARCHAR(255) DEFAULT ''"],
+        ['leads', 'utm_term', "VARCHAR(255) DEFAULT ''"],
+        ['leads', 'utm_content', "VARCHAR(255) DEFAULT ''"],
+        ['leads', 'gclid', "VARCHAR(500) DEFAULT ''"],
+        ['leads', 'traveler_count', 'INTEGER'],
+        ['leads', 'travel_month', "VARCHAR(20) DEFAULT ''"],
+        ['leads', 'selected_additional_services', "JSONB DEFAULT '[]'::jsonb"],
         ['leads', 'middle_name', "VARCHAR(255) DEFAULT ''"],
         ['leads', 'nationality', "VARCHAR(255) DEFAULT ''"],
         ['leads', 'travel_intent', "VARCHAR(255) DEFAULT ''"],
@@ -600,6 +626,7 @@ export async function GET() {
         ['leads', 'marital_status', "VARCHAR(100) DEFAULT ''"],
         ['packages', 'itinerary', 'TEXT'],
         ['packages', 'additional_info', 'TEXT'],
+        ['packages', 'updated_at', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP'],
         ['region_pricing', 'usd_price', 'VARCHAR(50) DEFAULT \'\''],
         ['about_us', 'premium_heading', 'VARCHAR(255) DEFAULT \'\''],
         ['about_us', 'premium_description', 'TEXT DEFAULT \'\''],
@@ -636,6 +663,16 @@ export async function GET() {
         } catch (e) {
           // Column might already exist or table doesn't exist yet
         }
+      }
+      try {
+        await db.query('CREATE INDEX IF NOT EXISTS idx_leads_created_at_id ON leads (created_at DESC, id DESC)');
+      } catch (e) {
+        // Leads may not have been created on this legacy installation yet.
+      }
+      try {
+        await db.query('ALTER TABLE packages DROP COLUMN IF EXISTS landing_content');
+      } catch (e) {
+        // Existing package records remain usable if a legacy schema is unavailable.
       }
 
       // These tables are singletons. Keep the most recently updated row and

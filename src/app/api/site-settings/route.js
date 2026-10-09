@@ -7,6 +7,10 @@ const defaults = {
   insurance: { enabled: true, heading: 'Travel Insurance', description: '', button_text: 'Enquire now', button_link: '/contact?subject=Travel%20Insurance' },
   cookies: { enabled: true, message: 'We use cookies to improve your experience.', policy_url: '/privacy-policy', accept_text: 'Accept all', reject_text: 'Reject non-essential' },
   crm: { provider: 'none', enabled: false, webhook_url: '', form_mapping: {} },
+  google_ads: {
+    conversion_id: '', conversion_label: '', enhanced_conversions_enabled: false,
+    consent_required: true, consent_mode: 'granted_only',
+  },
   social: { facebook: '', instagram: '', linkedin: '', tiktok: '', youtube: '', whatsapp: '' }
 };
 

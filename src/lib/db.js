@@ -68,8 +68,11 @@ const isTransientConnectionError = (error) => {
   if (!error) return false;
   const msg = (error.message || '').toLowerCase();
   const code = (error.code || '').toLowerCase();
+  // A query read timeout means PostgreSQL accepted the query but did not
+  // return it in time. Replaying the same slow query only doubles the wait
+  // (and can add load to an already struggling database).
+  if (msg.includes('query read timeout')) return false;
   return (
-    msg.includes('query read timeout') ||
     msg.includes('timeout') ||
     msg.includes('connection terminated') ||
     msg.includes('connection closed') ||
@@ -191,7 +194,7 @@ const processRows = (rows) => {
 // ========== Query Functions ==========
 
 // Generic query function with fallback
-const query = async (sql, params = []) => {
+const query = async (sql, params = [], options = {}) => {
   const sqlLower = sql.toLowerCase().trim();
 
   // CREATE/ALTER/INSERT/UPDATE/DELETE queries - only work with PostgreSQL
@@ -237,7 +240,8 @@ const query = async (sql, params = []) => {
     try {
       const pgSql = convertPlaceholders(sql);
       const result = await executeWithRetry(() => pool.query(pgSql, params));
-      return processRows(result.rows || []);
+      const rows = result.rows || [];
+      return options.processImages === false ? rows : processRows(rows);
     } catch (error) {
       // If PostgreSQL is configured but query fails (e.g. table doesn't exist),
       // throw the error instead of silently falling back to JSON.
@@ -288,7 +292,7 @@ const query = async (sql, params = []) => {
     }
   }
 
-  return processRows(results);
+  return options.processImages === false ? results : processRows(results);
 };
 
 // Generic get one

@@ -18,6 +18,7 @@ function NewPackageContent() {
   const searchParams = useSearchParams();
   const destParam = searchParams.get("destination_id") || "";
   const [destinations, setDestinations] = useState([]);
+  const [packageChoices, setPackageChoices] = useState([]);
   const MAX_PACKAGE_IMAGES = 8;
   const MAX_IMAGE_SIZE = 1 * 1024 * 1024; // 1 MB
 
@@ -26,6 +27,7 @@ function NewPackageContent() {
     long_description: "", sub_heading: "", itinerary: "", additional_info: "", image_url: "",
     gallery_images: [], inclusives: "", exclusives: "", price_currency: "USD", price_value: "",
     sort_order: 0, is_trending: false, is_spiritual: false,
+    related_package_ids: [], quote_cta_text: "Get a Quote", price_display_label: "per person / twin share",
   });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useStatusToast();
@@ -37,9 +39,12 @@ function NewPackageContent() {
     let active = true;
     (async () => {
       try {
-        const res = await fetch("/api/destinations");
-        const data = await res.json();
-        if (active) setDestinations(data.destinations || []);
+        const [res, choicesRes] = await Promise.all([fetch("/api/destinations"), fetch("/api/packages?all=true&summary=true")]);
+        const [data, choicesData] = await Promise.all([res.json(), choicesRes.json()]);
+        if (active) {
+          setDestinations(data.destinations || []);
+          setPackageChoices(choicesData.packages || []);
+        }
       } catch (error) { console.error(error); }
     })();
     return () => { active = false; };
@@ -188,6 +193,14 @@ function NewPackageContent() {
               <input value={form.days} onChange={(e) => setForm({ ...form, days: e.target.value })} className="admin-input" placeholder="e.g., 12 Days / 11 Nights" />
             </div>
             <div>
+              <label className="admin-label">Quote CTA text</label>
+              <input value={form.quote_cta_text} onChange={(e) => setForm({ ...form, quote_cta_text: e.target.value })} className="admin-input" placeholder="Get a Quote" />
+            </div>
+            <div>
+              <label className="admin-label">Price display wording</label>
+              <input value={form.price_display_label} onChange={(e) => setForm({ ...form, price_display_label: e.target.value })} className="admin-input" placeholder="per person / twin share" />
+            </div>
+            <div>
               <label className="admin-label">Meals</label>
               <input value={form.meals} onChange={(e) => setForm({ ...form, meals: e.target.value })} className="admin-input" placeholder="e.g., Breakfast & Dinner" />
             </div>
@@ -216,6 +229,21 @@ function NewPackageContent() {
               <label className="admin-label">Additional Info</label>
               <RichTextEditor value={form.additional_info} onChange={(html) => setForm({ ...form, additional_info: html })} rows={3} placeholder="Extra package notes, customization details, or special instructions." allowImageUpload />
             </div>
+            <fieldset className="md:col-span-2 rounded-xl border border-gray-200 p-4">
+              <legend className="px-1 text-sm font-semibold text-gray-800">More Packages (choose up to 2)</legend>
+              <p className="mb-3 text-xs text-gray-500">Select up to 2 packages. The public page shows only these selections; if none are selected, the section stays hidden.</p>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {packageChoices.map((item) => {
+                  const packageId = Number(item.id);
+                  const checked = form.related_package_ids.includes(packageId);
+                  const limitReached = form.related_package_ids.length >= 2 && !checked;
+                  return <label key={item.id} className={`flex items-start gap-2 rounded-lg border p-3 text-sm ${limitReached ? "opacity-60" : ""}`}>
+                    <input type="checkbox" checked={checked} disabled={limitReached} onChange={(event) => setForm((current) => ({ ...current, related_package_ids: event.target.checked ? [...current.related_package_ids, packageId] : current.related_package_ids.filter((selectedId) => selectedId !== packageId) }))} className="mt-1" />
+                    <span className="font-medium">{item.title}{!item.is_active ? <span className="ml-1 text-xs font-normal text-amber-700">(inactive)</span> : null}</span>
+                  </label>;
+                })}
+              </div>
+            </fieldset>
             <div>
               <label className="admin-label">Inclusions</label>
               <RichTextEditor value={form.inclusives} onChange={(html) => setForm({ ...form, inclusives: html })} rows={3} placeholder="One per line" uniformTextSize allowImageUpload />

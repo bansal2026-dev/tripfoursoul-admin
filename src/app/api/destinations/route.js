@@ -42,18 +42,27 @@ export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const region = searchParams.get('region');
+    const destinationId = searchParams.get('id');
 
     const all = searchParams.get('all') === 'true';
-    let destinations = await db.query('SELECT * FROM destinations WHERE is_active = $1 OR $2 = true', [true, all]);
+    const summary = searchParams.get('summary') === 'true' || (!all && !destinationId);
+    const columns = summary
+      ? `id, name, slug,
+         regexp_replace(COALESCE(description, ''), 'data:image/[^;]+;base64,[A-Za-z0-9+/=]+', '[embedded image]', 'g') AS description,
+         image_url, region, price, price_usd, price_inr, price_eur, sort_order, is_trending, is_spiritual, is_active`
+      : '*';
+    let destinations = await db.query(
+      `SELECT ${columns} FROM destinations WHERE (is_active = $1 OR $2 = true) AND ($3::int IS NULL OR id = $3) ORDER BY sort_order ASC`,
+      [true, all, destinationId ? Number(destinationId) : null],
+      { processImages: false }
+    );
 
     if (region && region !== 'all') {
       destinations = destinations.filter(d => d.region === region);
     }
 
-    // Sort by sort_order and created_at
-    destinations.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-
-    // Return gallery_images as a parsed array so consumers can render a gallery.
+    // Full destination requests return gallery_images as an array. Summary
+    // list requests intentionally skip this potentially large field.
     destinations = destinations.map((d) => {
       try { d.gallery_images = parseGalleryImages(d.gallery_images); } catch { d.gallery_images = []; }
       return d;

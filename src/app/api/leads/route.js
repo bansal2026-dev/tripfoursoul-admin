@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { getTokenFromCookies, verifyToken } from '@/lib/auth';
 
-const ensureLeadsTable = async () => {
+const ensureLeadsTableUncached = async () => {
   await db.query(`
     CREATE TABLE IF NOT EXISTS leads (
     id SERIAL PRIMARY KEY,
@@ -21,6 +21,9 @@ const ensureLeadsTable = async () => {
     trip_budget VARCHAR(255) DEFAULT '',
     receive_offers BOOLEAN DEFAULT false,
     travellers VARCHAR(100) DEFAULT '',
+    traveler_count INTEGER,
+    travel_month VARCHAR(20) DEFAULT '',
+    selected_additional_services JSONB DEFAULT '[]'::jsonb,
     message TEXT DEFAULT '',
     additional_information TEXT DEFAULT '',
     coupon_code VARCHAR(100) DEFAULT '',
@@ -29,6 +32,14 @@ const ensureLeadsTable = async () => {
     source VARCHAR(100) DEFAULT 'website',
     service_type VARCHAR(100) DEFAULT '',
     source_page VARCHAR(500) DEFAULT '',
+    selected_package VARCHAR(255) DEFAULT '',
+    landing_url TEXT DEFAULT '',
+    utm_source VARCHAR(255) DEFAULT '',
+    utm_medium VARCHAR(255) DEFAULT '',
+    utm_campaign VARCHAR(255) DEFAULT '',
+    utm_term VARCHAR(255) DEFAULT '',
+    utm_content VARCHAR(255) DEFAULT '',
+    gclid VARCHAR(500) DEFAULT '',
     nationality VARCHAR(255) DEFAULT '',
     travel_intent VARCHAR(255) DEFAULT '',
     financial_sponsorship_info TEXT DEFAULT '',
@@ -52,12 +63,23 @@ const ensureLeadsTable = async () => {
       ADD COLUMN IF NOT EXISTS travel_style VARCHAR(255) DEFAULT '',
       ADD COLUMN IF NOT EXISTS trip_budget VARCHAR(255) DEFAULT '',
       ADD COLUMN IF NOT EXISTS receive_offers BOOLEAN DEFAULT false,
+      ADD COLUMN IF NOT EXISTS traveler_count INTEGER,
+      ADD COLUMN IF NOT EXISTS travel_month VARCHAR(20) DEFAULT '',
+      ADD COLUMN IF NOT EXISTS selected_additional_services JSONB DEFAULT '[]'::jsonb,
       ADD COLUMN IF NOT EXISTS additional_information TEXT DEFAULT '',
       ADD COLUMN IF NOT EXISTS coupon_code VARCHAR(100) DEFAULT '',
       ADD COLUMN IF NOT EXISTS offer_duration TEXT,
       ADD COLUMN IF NOT EXISTS offer_duration_days INTEGER,
       ADD COLUMN IF NOT EXISTS service_type VARCHAR(100) DEFAULT '',
       ADD COLUMN IF NOT EXISTS source_page VARCHAR(500) DEFAULT '',
+      ADD COLUMN IF NOT EXISTS selected_package VARCHAR(255) DEFAULT '',
+      ADD COLUMN IF NOT EXISTS landing_url TEXT DEFAULT '',
+      ADD COLUMN IF NOT EXISTS utm_source VARCHAR(255) DEFAULT '',
+      ADD COLUMN IF NOT EXISTS utm_medium VARCHAR(255) DEFAULT '',
+      ADD COLUMN IF NOT EXISTS utm_campaign VARCHAR(255) DEFAULT '',
+      ADD COLUMN IF NOT EXISTS utm_term VARCHAR(255) DEFAULT '',
+      ADD COLUMN IF NOT EXISTS utm_content VARCHAR(255) DEFAULT '',
+      ADD COLUMN IF NOT EXISTS gclid VARCHAR(500) DEFAULT '',
       ADD COLUMN IF NOT EXISTS nationality VARCHAR(255) DEFAULT '',
       ADD COLUMN IF NOT EXISTS travel_intent VARCHAR(255) DEFAULT '',
       ADD COLUMN IF NOT EXISTS financial_sponsorship_info TEXT DEFAULT '',
@@ -66,6 +88,18 @@ const ensureLeadsTable = async () => {
       ADD COLUMN IF NOT EXISTS gender VARCHAR(20) DEFAULT '',
       ADD COLUMN IF NOT EXISTS marital_status VARCHAR(100) DEFAULT ''
   `);
+  await db.query('CREATE INDEX IF NOT EXISTS idx_leads_created_at_id ON leads (created_at DESC, id DESC)');
+};
+
+let leadsSchemaMigration;
+const ensureLeadsTable = () => {
+  if (!leadsSchemaMigration) {
+    leadsSchemaMigration = ensureLeadsTableUncached().catch((error) => {
+      leadsSchemaMigration = null;
+      throw error;
+    });
+  }
+  return leadsSchemaMigration;
 };
 
 const value = (item) => String(item ?? '').trim();
@@ -100,6 +134,18 @@ const validDurationDays = (days) => {
   const item = value(days);
   return /^\d+$/.test(item) && Number(item) > 0 ? Number(item) : null;
 };
+const normalizeSelectedServices = (services) => {
+  if (!Array.isArray(services)) return [];
+  return services.slice(0, 50).map((service) => {
+    if (service && typeof service === 'object') {
+      return {
+        id: Number.isInteger(Number(service.id)) ? Number(service.id) : null,
+        title: value(service.title || service.name).slice(0, 255),
+      };
+    }
+    return { id: null, title: value(service).slice(0, 255) };
+  }).filter((service) => service.title);
+};
 const travelServiceTypes = new Set(['private-transfer', 'travel-insurance', 'visa']);
 const normalizedServiceType = (serviceType) => {
   const s = value(serviceType).toLowerCase().replace(/[\s_]+/g, '-');
@@ -130,7 +176,7 @@ const hasValidLeadsApiKey = (request) => {
 export async function GET() {
   try {
     await ensureLeadsTable();
-    const leads = await db.query('SELECT * FROM leads ORDER BY created_at DESC, id DESC');
+    const leads = await db.query('SELECT * FROM leads ORDER BY created_at DESC, id DESC', [], { processImages: false });
     return NextResponse.json({ leads: leads.map(hydrateMessageDetails) });
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -178,6 +224,11 @@ export async function POST(request) {
       trip_budget: value(body.trip_budget) || parsed.trip_budget,
       receive_offers: Object.prototype.hasOwnProperty.call(body, 'receive_offers') ? booleanValue(body.receive_offers) : booleanValue(parsed.receive_offers),
       travellers: value(body.travellers),
+      traveler_count: Number.isInteger(Number(body.traveler_count ?? body.travellers)) && Number(body.traveler_count ?? body.travellers) > 0
+        ? Number(body.traveler_count ?? body.travellers)
+        : null,
+      travel_month: value(body.travel_month).slice(0, 20),
+      selected_additional_services: normalizeSelectedServices(body.selected_additional_services || body.selected_services),
       message: finalMessage,
       additional_information: additionalInfo,
       coupon_code: value(body.coupon_code || body.coupon).toUpperCase(),
@@ -186,6 +237,14 @@ export async function POST(request) {
       source: value(body.source) || 'website',
       service_type: serviceType,
       source_page: value(body.source_page || body.source_url || body.page),
+      selected_package: value(body.selected_package || body.package_name || body.package),
+      landing_url: value(body.landing_url),
+      utm_source: value(body.utm_source),
+      utm_medium: value(body.utm_medium),
+      utm_campaign: value(body.utm_campaign),
+      utm_term: value(body.utm_term),
+      utm_content: value(body.utm_content),
+      gclid: value(body.gclid),
       nationality,
       travel_intent: travelIntent,
       financial_sponsorship_info: financialSponsorshipInfo,

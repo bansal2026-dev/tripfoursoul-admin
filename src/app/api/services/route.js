@@ -9,8 +9,18 @@ const makeSlug = (value = '') =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)/g, '');
 
+let serviceSchemaMigration;
+const ensureServiceSchema = () => {
+  if (!serviceSchemaMigration) {
+    serviceSchemaMigration = db.query("ALTER TABLE services ADD COLUMN IF NOT EXISTS price VARCHAR(100) DEFAULT ''")
+      .catch((error) => { serviceSchemaMigration = null; throw error; });
+  }
+  return serviceSchemaMigration;
+};
+
 export async function GET(request) {
   try {
+    await ensureServiceSchema();
     const { searchParams } = new URL(request.url);
     const all = searchParams.get('all') === 'true';
     let services = await db.query('SELECT * FROM services WHERE is_active = $1 OR $2 = true', [true, all]);
@@ -23,8 +33,9 @@ export async function GET(request) {
 
 export async function POST(request) {
   try {
+    await ensureServiceSchema();
     const body = await request.json();
-    const { title, description = '', image_url = '', icon = '', sort_order = 0, is_active = true } = body;
+    const { title, description = '', image_url = '', icon = '', price = '', sort_order = 0, is_active = true } = body;
 
     if (!title) {
       return NextResponse.json({ error: 'Service title is required' }, { status: 400 });
@@ -50,6 +61,7 @@ export async function POST(request) {
       description,
       image_url,
       icon,
+      price,
       sort_order: serviceSort,
       is_active: is_active,
     });
@@ -62,8 +74,9 @@ export async function POST(request) {
 
 export async function PUT(request) {
   try {
+    await ensureServiceSchema();
     const body = await request.json();
-    const { id, title, description, image_url, icon, sort_order, is_active } = body;
+    const { id, title, description, image_url, icon, price, sort_order, is_active } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'Service ID required' }, { status: 400 });
@@ -97,6 +110,7 @@ export async function PUT(request) {
     if (description !== undefined) updateData.description = description;
     if (image_url !== undefined) updateData.image_url = image_url;
     if (icon !== undefined) updateData.icon = icon;
+    if (price !== undefined) updateData.price = price;
     updateData.sort_order = nextSortOrder;
     updateData.is_active = nextActive;
     updateData.updated_at = new Date().toISOString();
@@ -110,6 +124,7 @@ export async function PUT(request) {
 
 export async function DELETE(request) {
   try {
+    await ensureServiceSchema();
     const { searchParams } = new URL(request.url);
     const id = Number(searchParams.get('id'));
 

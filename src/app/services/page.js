@@ -10,6 +10,7 @@ const emptyService = {
   description: "",
   image_url: "",
   icon: "",
+  price: "",
   sort_order: 0,
   is_active: 1,
 };
@@ -100,6 +101,7 @@ export default function ServicesPage() {
       description: item.description || "",
       image_url: item.image_url || "",
       icon: item.icon || "",
+      price: item.price || "",
       sort_order: item.sort_order || 0,
       is_active: item.is_active ? 1 : 0,
     });
@@ -209,6 +211,10 @@ export default function ServicesPage() {
                     className="admin-input"
                     placeholder="https://..."
                   />
+                </div>
+                <div>
+                  <label className="admin-label">Optional price</label>
+                  <input value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} className="admin-input" placeholder="e.g. From $45 or Contact for price" />
                 </div>
                 <div>
                   <label className="admin-label">Sort order</label>

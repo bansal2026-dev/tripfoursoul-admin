@@ -17,7 +17,7 @@ export default function TrendingPage() {
     (async () => {
       try {
         const [destRes, pkgRes] = await Promise.all([
-          fetch("/api/destinations?all=true"),
+          fetch("/api/destinations?all=true&summary=true"),
           fetch("/api/packages"),
         ]);
         const destData = await destRes.json();

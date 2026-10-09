@@ -58,6 +58,9 @@ ALTER TABLE IF EXISTS destinations ADD COLUMN IF NOT EXISTS price_inr VARCHAR(50
 ALTER TABLE IF EXISTS destinations ADD COLUMN IF NOT EXISTS price_eur VARCHAR(50) DEFAULT '';
 ALTER TABLE IF EXISTS destinations ADD COLUMN IF NOT EXISTS gallery_images JSONB;
 ALTER TABLE IF EXISTS packages ADD COLUMN IF NOT EXISTS gallery_images JSONB;
+ALTER TABLE IF EXISTS packages ADD COLUMN IF NOT EXISTS quote_cta_text VARCHAR(100) DEFAULT 'Get a Quote';
+ALTER TABLE IF EXISTS packages ADD COLUMN IF NOT EXISTS price_display_label VARCHAR(100) DEFAULT 'per person / twin share';
+ALTER TABLE IF EXISTS services ADD COLUMN IF NOT EXISTS price VARCHAR(100) DEFAULT '';
 ALTER TABLE IF EXISTS testimonials ALTER COLUMN image_url TYPE TEXT;
 ALTER TABLE IF EXISTS about_us ALTER COLUMN image_url TYPE TEXT;
 ALTER TABLE IF EXISTS about_us ALTER COLUMN experience_image TYPE TEXT;
@@ -212,10 +215,21 @@ CREATE TABLE IF NOT EXISTS leads (
   additional_information TEXT DEFAULT '',
   coupon_code VARCHAR(100) DEFAULT '',
   offer_duration TEXT,
-  offer_duration_days INTEGER,
-  source VARCHAR(100) DEFAULT 'website',
-  service_type VARCHAR(100) DEFAULT '',
-  source_page VARCHAR(500) DEFAULT '',
+    offer_duration_days INTEGER,
+    source VARCHAR(100) DEFAULT 'website',
+    service_type VARCHAR(100) DEFAULT '',
+    source_page VARCHAR(500) DEFAULT '',
+    selected_package VARCHAR(255) DEFAULT '',
+    landing_url TEXT DEFAULT '',
+    utm_source VARCHAR(255) DEFAULT '',
+    utm_medium VARCHAR(255) DEFAULT '',
+    utm_campaign VARCHAR(255) DEFAULT '',
+    utm_term VARCHAR(255) DEFAULT '',
+    utm_content VARCHAR(255) DEFAULT '',
+  gclid VARCHAR(500) DEFAULT '',
+  traveler_count INTEGER,
+  travel_month VARCHAR(20) DEFAULT '',
+  selected_additional_services JSONB DEFAULT '[]'::jsonb,
   nationality VARCHAR(255) DEFAULT '',
   travel_intent VARCHAR(255) DEFAULT '',
   financial_sponsorship_info TEXT DEFAULT '',
@@ -226,6 +240,7 @@ CREATE TABLE IF NOT EXISTS leads (
   status VARCHAR(30) DEFAULT 'new',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX IF NOT EXISTS idx_leads_created_at_id ON leads (created_at DESC, id DESC);
 
 -- Blog categories table
 CREATE TABLE IF NOT EXISTS blog_categories (
@@ -395,11 +410,13 @@ CREATE TABLE IF NOT EXISTS services (
   description TEXT DEFAULT '',
   image_url TEXT DEFAULT '',
   icon VARCHAR(100) DEFAULT '',
+  price VARCHAR(100) DEFAULT '',
   sort_order INT DEFAULT 0,
   is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+ALTER TABLE services ADD COLUMN IF NOT EXISTS price VARCHAR(100) DEFAULT '';
 
 -- Destinations table
 CREATE TABLE IF NOT EXISTS destinations (
@@ -439,6 +456,8 @@ CREATE TABLE IF NOT EXISTS packages (
   itinerary TEXT,
   additional_info TEXT,
   price VARCHAR(50) DEFAULT '',
+  quote_cta_text VARCHAR(100) DEFAULT 'Get a Quote',
+  price_display_label VARCHAR(100) DEFAULT 'per person / twin share',
   is_trending BOOLEAN DEFAULT false,
   is_spiritual BOOLEAN DEFAULT false,
   sort_order INT DEFAULT 0,
@@ -446,6 +465,24 @@ CREATE TABLE IF NOT EXISTS packages (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+ALTER TABLE packages DROP COLUMN IF EXISTS landing_content;
+ALTER TABLE packages ADD COLUMN IF NOT EXISTS quote_cta_text VARCHAR(100) DEFAULT 'Get a Quote';
+ALTER TABLE packages ADD COLUMN IF NOT EXISTS price_display_label VARCHAR(100) DEFAULT 'per person / twin share';
+ALTER TABLE packages ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+
+DROP TABLE IF EXISTS package_services;
+
+CREATE TABLE IF NOT EXISTS package_related_packages (
+  package_id INTEGER NOT NULL REFERENCES packages(id) ON DELETE CASCADE,
+  related_package_id INTEGER NOT NULL REFERENCES packages(id) ON DELETE CASCADE,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (package_id, related_package_id),
+  CHECK (package_id <> related_package_id)
+);
+
+ALTER TABLE IF EXISTS leads ADD COLUMN IF NOT EXISTS traveler_count INTEGER;
+ALTER TABLE IF EXISTS leads ADD COLUMN IF NOT EXISTS travel_month VARCHAR(20) DEFAULT '';
+ALTER TABLE IF EXISTS leads ADD COLUMN IF NOT EXISTS selected_additional_services JSONB DEFAULT '[]'::jsonb;
 
 CREATE INDEX IF NOT EXISTS idx_packages_destination_id ON packages(destination_id);
 CREATE INDEX IF NOT EXISTS idx_packages_sort_order ON packages(sort_order);
