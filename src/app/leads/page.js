@@ -18,6 +18,25 @@ export default function LeadsPage() {
   const [exportStartDate, setExportStartDate] = useState("");
   const [exportEndDate, setExportEndDate] = useState("");
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [searchText, setSearchText] = useState("");
+  const [leadSourceFilter, setLeadSourceFilter] = useState("");
+  const [utmSourceFilter, setUtmSourceFilter] = useState("");
+  const [utmCampaignFilter, setUtmCampaignFilter] = useState("");
+  const [dateStart, setDateStart] = useState("");
+  const [dateEnd, setDateEnd] = useState("");
+
+  const filteredLeads = leads.filter((lead) => {
+    const query = searchText.trim().toLowerCase();
+    const searchable = [lead.name, lead.first_name, lead.last_name, lead.email, lead.phone, lead.destination, lead.package_name, lead.selected_package].join(" ").toLowerCase();
+    const created = String(lead.created_at || "").slice(0, 10);
+    return (!query || searchable.includes(query))
+      && (!leadSourceFilter || lead.lead_source === leadSourceFilter)
+      && (!utmSourceFilter || lead.utm_source === utmSourceFilter)
+      && (!utmCampaignFilter || lead.utm_campaign === utmCampaignFilter)
+      && (!dateStart || created >= dateStart)
+      && (!dateEnd || created <= dateEnd);
+  });
+  const filterOptions = (field) => [...new Set(leads.map((lead) => lead[field]).filter(Boolean))].sort((a, b) => a.localeCompare(b));
 
   const {
     currentItems: paginatedLeads,
@@ -25,7 +44,7 @@ export default function LeadsPage() {
     setCurrentPage,
     totalItems,
     itemsPerPage,
-  } = usePagination(leads, 15);
+  } = usePagination(filteredLeads, 15);
 
   const leadName = (lead) => lead.name || [lead.first_name, lead.last_name].filter(Boolean).join(" ") || "—";
   const formatDate = (date) => {
@@ -212,15 +231,27 @@ export default function LeadsPage() {
         {message && <div className="mb-5 rounded-lg bg-red-50 p-3 text-sm text-red-700">{message}</div>}
         {loading ? <LoadingSpinner text="Loading leads..." /> : (
           <div className="admin-card overflow-x-auto">
+            <div className="grid gap-3 border-b border-gray-100 p-4 md:grid-cols-3 xl:grid-cols-6">
+              <input aria-label="Search leads" placeholder="Search name, email, phone…" value={searchText} onChange={(event) => setSearchText(event.target.value)} className="admin-input" />
+              <select aria-label="Filter by lead source" value={leadSourceFilter} onChange={(event) => setLeadSourceFilter(event.target.value)} className="admin-input"><option value="">All lead sources</option>{filterOptions("lead_source").map((item) => <option key={item}>{item}</option>)}</select>
+              <select aria-label="Filter by UTM source" value={utmSourceFilter} onChange={(event) => setUtmSourceFilter(event.target.value)} className="admin-input"><option value="">All UTM sources</option>{filterOptions("utm_source").map((item) => <option key={item}>{item}</option>)}</select>
+              <select aria-label="Filter by UTM campaign" value={utmCampaignFilter} onChange={(event) => setUtmCampaignFilter(event.target.value)} className="admin-input"><option value="">All UTM campaigns</option>{filterOptions("utm_campaign").map((item) => <option key={item}>{item}</option>)}</select>
+              <input aria-label="Submitted from date" type="date" value={dateStart} onChange={(event) => setDateStart(event.target.value)} className="admin-input" />
+              <input aria-label="Submitted to date" type="date" value={dateEnd} onChange={(event) => setDateEnd(event.target.value)} className="admin-input" />
+            </div>
             <table className="w-full min-w-[1850px] text-left text-sm">
-              <thead><tr className="border-b border-gray-200 text-xs uppercase tracking-wide text-gray-500"><th className="px-3 py-3">Submitted</th><th className="px-3 py-3">Name</th><th className="px-3 py-3">Package</th><th className="px-3 py-3">Source page</th><th className="px-3 py-3">UTM campaign</th><th className="px-3 py-3">Email</th><th className="px-3 py-3">Phone</th><th className="px-3 py-3">Travel start</th><th className="px-3 py-3">Travel end</th><th className="px-3 py-3">Travel style</th><th className="px-3 py-3">Trip budget</th><th className="px-3 py-3">Status</th><th className="px-3 py-3">Action</th></tr></thead>
+              <thead><tr className="border-b border-gray-200 text-xs uppercase tracking-wide text-gray-500"><th className="px-3 py-3">Submitted</th><th className="px-3 py-3">Name</th><th className="px-3 py-3">Package</th><th className="px-3 py-3">Lead source</th><th className="px-3 py-3">UTM source</th><th className="px-3 py-3">UTM medium</th><th className="px-3 py-3">UTM campaign</th><th className="px-3 py-3">Landing page</th><th className="px-3 py-3">Click IDs</th><th className="px-3 py-3">Email</th><th className="px-3 py-3">Phone</th><th className="px-3 py-3">Travel start</th><th className="px-3 py-3">Travel end</th><th className="px-3 py-3">Travel style</th><th className="px-3 py-3">Trip budget</th><th className="px-3 py-3">Status</th><th className="px-3 py-3">Action</th></tr></thead>
               <tbody>{paginatedLeads.map((lead) => (
                 <tr key={lead.id} className="border-b border-gray-100 align-top">
                   <td className="px-3 py-3 text-gray-500">{lead.created_at ? new Date(lead.created_at).toLocaleString() : "—"}</td>
                   <td className="px-3 py-3 font-semibold text-gray-900">{leadName(lead)}</td>
                   <td className="px-3 py-3 font-medium text-teal-700">{lead.selected_package || lead.package_name || "—"}</td>
-                  <td className="max-w-56 truncate px-3 py-3" title={lead.source_page || lead.source || ""}>{lead.source_page || lead.source || "—"}</td>
+                  <td className="px-3 py-3">{lead.lead_source || "—"}</td>
+                  <td className="px-3 py-3">{lead.utm_source || "—"}</td>
+                  <td className="px-3 py-3">{lead.utm_medium || "—"}</td>
                   <td className="px-3 py-3">{lead.utm_campaign || "—"}</td>
+                  <td className="max-w-56 truncate px-3 py-3" title={lead.landing_page || ""}>{lead.landing_page || "—"}</td>
+                  <td className="max-w-56 truncate px-3 py-3" title={[lead.gclid, lead.gbraid, lead.wbraid].filter(Boolean).join(" | ")}>{[lead.gclid && `gclid: ${lead.gclid}`, lead.gbraid && `gbraid: ${lead.gbraid}`, lead.wbraid && `wbraid: ${lead.wbraid}`].filter(Boolean).join("; ") || "—"}</td>
                   <td className="px-3 py-3">{lead.email || "—"}</td>
                   <td className="px-3 py-3">{lead.phone || "—"}</td>
                   <td className="px-3 py-3">{formatDate(lead.travel_start_date)}</td>
@@ -238,6 +269,7 @@ export default function LeadsPage() {
               itemsPerPage={itemsPerPage}
               onPageChange={setCurrentPage}
             />
+            {!!leads.length && !filteredLeads.length && <p className="py-8 text-center text-sm text-gray-500">No leads match these filters.</p>}
             {!leads.length && <p className="py-8 text-center text-sm text-gray-500">No leads yet.</p>}
           </div>
         )}
@@ -245,7 +277,7 @@ export default function LeadsPage() {
           <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white p-6 shadow-xl" role="dialog" aria-modal="true" aria-labelledby="lead-details-title" onClick={(event) => event.stopPropagation()}>
             <div className="mb-5 flex items-start justify-between gap-4"><div><h2 id="lead-details-title" className="text-xl font-bold text-gray-900">Lead details</h2><p className="mt-1 text-sm text-gray-500">Submitted {selectedLead.created_at ? new Date(selectedLead.created_at).toLocaleString() : "—"}</p></div><button onClick={() => setSelectedLead(null)} className="text-2xl leading-none text-gray-400 hover:text-gray-700" aria-label="Close lead details">×</button></div>
             <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
-              <Detail label="Name" value={leadName(selectedLead)} /><Detail label="First name" value={selectedLead.first_name} /><Detail label="Middle name" value={selectedLead.middle_name} /><Detail label="Last name" value={selectedLead.last_name} /><Detail label="Email" value={selectedLead.email} /><Detail label="Phone" value={selectedLead.phone} /><Detail label="Service" value={selectedLead.service_type} /><Detail label="Source page" value={selectedLead.source_page} /><Detail label="Landing URL" value={selectedLead.landing_url} /><Detail label="Citizenship / Nationality" value={selectedLead.nationality} /><Detail label="Travel intent" value={selectedLead.travel_intent} /><Detail label="Date of birth" value={formatDate(selectedLead.date_of_birth)} /><Detail label="Travel date" value={formatDate(selectedLead.travel_date)} /><Detail label="Gender" value={selectedLead.gender} /><Detail label="Marital status" value={selectedLead.marital_status} /><Detail label="Destination / country to visit" value={selectedLead.destination} /><Detail label="Package" value={selectedLead.selected_package || selectedLead.package_name} /><Detail label="Coupon code" value={selectedLead.coupon_code} /><Detail label="Travel start date" value={formatDate(selectedLead.travel_start_date)} /><Detail label="Travel end date" value={formatDate(selectedLead.travel_end_date)} /><Detail label="Travel style" value={selectedLead.travel_style} /><Detail label="Trip budget" value={selectedLead.trip_budget} /><Detail label="Receive offers" value={offerValue(selectedLead) ? "Yes" : "No"} /><Detail label="Legacy travel date" value={selectedLead.date} /><Detail label="Travellers" value={selectedLead.travellers} /><Detail label="Source" value={selectedLead.source} /><Detail label="UTM source" value={selectedLead.utm_source} /><Detail label="UTM medium" value={selectedLead.utm_medium} /><Detail label="UTM campaign" value={selectedLead.utm_campaign} /><Detail label="UTM term" value={selectedLead.utm_term} /><Detail label="UTM content" value={selectedLead.utm_content} /><Detail label="Google click ID" value={selectedLead.gclid} /><Detail label="Status" value={selectedLead.status} />
+              <Detail label="Name" value={leadName(selectedLead)} /><Detail label="First name" value={selectedLead.first_name} /><Detail label="Middle name" value={selectedLead.middle_name} /><Detail label="Last name" value={selectedLead.last_name} /><Detail label="Email" value={selectedLead.email} /><Detail label="Phone" value={selectedLead.phone} /><Detail label="Service" value={selectedLead.service_type} /><Detail label="Source page" value={selectedLead.source_page} /><Detail label="Landing page" value={selectedLead.landing_page} /><Detail label="Landing URL" value={selectedLead.landing_url} /><Detail label="Referrer" value={selectedLead.referrer} /><Detail label="Lead source" value={selectedLead.lead_source} /><Detail label="Citizenship / Nationality" value={selectedLead.nationality} /><Detail label="Travel intent" value={selectedLead.travel_intent} /><Detail label="Date of birth" value={formatDate(selectedLead.date_of_birth)} /><Detail label="Travel date" value={formatDate(selectedLead.travel_date)} /><Detail label="Gender" value={selectedLead.gender} /><Detail label="Marital status" value={selectedLead.marital_status} /><Detail label="Destination / country to visit" value={selectedLead.destination} /><Detail label="Package" value={selectedLead.selected_package || selectedLead.package_name} /><Detail label="Coupon code" value={selectedLead.coupon_code} /><Detail label="Travel start date" value={formatDate(selectedLead.travel_start_date)} /><Detail label="Travel end date" value={formatDate(selectedLead.travel_end_date)} /><Detail label="Travel style" value={selectedLead.travel_style} /><Detail label="Trip budget" value={selectedLead.trip_budget} /><Detail label="Receive offers" value={offerValue(selectedLead) ? "Yes" : "No"} /><Detail label="Legacy travel date" value={selectedLead.date} /><Detail label="Travellers" value={selectedLead.travellers} /><Detail label="Source" value={selectedLead.source} /><Detail label="UTM source" value={selectedLead.utm_source} /><Detail label="UTM medium" value={selectedLead.utm_medium} /><Detail label="UTM campaign" value={selectedLead.utm_campaign} /><Detail label="UTM term" value={selectedLead.utm_term} /><Detail label="UTM content" value={selectedLead.utm_content} /><Detail label="Google click ID" value={selectedLead.gclid} /><Detail label="Google braid ID" value={selectedLead.gbraid} /><Detail label="Web braid ID" value={selectedLead.wbraid} /><Detail label="Status" value={selectedLead.status} />
               <Detail label="Traveler count" value={selectedLead.traveler_count || selectedLead.travellers} /><Detail label="Travel month" value={selectedLead.travel_month} /><Detail label="Selected additional services" value={selectedServicesText(selectedLead)} className="sm:col-span-2" />
               <Detail label="Financial & sponsorship info" value={selectedLead.financial_sponsorship_info} className="sm:col-span-2" />
               <Detail label="Message" value={selectedLead.message || selectedLead.additional_information} className="sm:col-span-2" /><Detail label="Additional information" value={selectedLead.additional_information || selectedLead.message} className="sm:col-span-2" />

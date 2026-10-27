@@ -80,6 +80,11 @@ const ensureLeadsTableUncached = async () => {
       ADD COLUMN IF NOT EXISTS utm_term VARCHAR(255) DEFAULT '',
       ADD COLUMN IF NOT EXISTS utm_content VARCHAR(255) DEFAULT '',
       ADD COLUMN IF NOT EXISTS gclid VARCHAR(500) DEFAULT '',
+      ADD COLUMN IF NOT EXISTS gbraid VARCHAR(500),
+      ADD COLUMN IF NOT EXISTS wbraid VARCHAR(500),
+      ADD COLUMN IF NOT EXISTS landing_page VARCHAR(2048),
+      ADD COLUMN IF NOT EXISTS referrer VARCHAR(2048),
+      ADD COLUMN IF NOT EXISTS lead_source VARCHAR(255),
       ADD COLUMN IF NOT EXISTS nationality VARCHAR(255) DEFAULT '',
       ADD COLUMN IF NOT EXISTS travel_intent VARCHAR(255) DEFAULT '',
       ADD COLUMN IF NOT EXISTS financial_sponsorship_info TEXT DEFAULT '',
@@ -103,6 +108,7 @@ const ensureLeadsTable = () => {
 };
 
 const value = (item) => String(item ?? '').trim();
+const attributionValue = (item, maxLength) => value(item).replace(/[\u0000-\u001f\u007f]/g, '').slice(0, maxLength) || null;
 const booleanValue = (item) => item === true || item === 1 || item === '1' || ['true', 'yes', 'on'].includes(String(item).toLowerCase());
 const messageLeadLabels = ['Travel start date', 'Travel end date', 'Travel style', 'Trip budget', 'Receive offers'];
 const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -173,8 +179,14 @@ const hasValidLeadsApiKey = (request) => {
   return Boolean(expectedKey) && request.headers.get('x-leads-api-key') === expectedKey;
 };
 
-export async function GET() {
+export async function GET(request) {
   try {
+    const payload = verifyToken(getTokenFromCookies(request));
+    let permissions = payload?.permissions || [];
+    if (typeof permissions === 'string') { try { permissions = JSON.parse(permissions); } catch { permissions = []; } }
+    if (!payload || !['admin', 'super_admin'].includes(payload.role) && !(payload.role === 'staff' && Array.isArray(permissions) && permissions.includes('leads'))) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
     await ensureLeadsTable();
     const leads = await db.query('SELECT * FROM leads ORDER BY created_at DESC, id DESC', [], { processImages: false });
     return NextResponse.json({ leads: leads.map(hydrateMessageDetails) });
@@ -239,12 +251,18 @@ export async function POST(request) {
       source_page: value(body.source_page || body.source_url || body.page),
       selected_package: value(body.selected_package || body.package_name || body.package),
       landing_url: value(body.landing_url),
-      utm_source: value(body.utm_source),
-      utm_medium: value(body.utm_medium),
-      utm_campaign: value(body.utm_campaign),
-      utm_term: value(body.utm_term),
-      utm_content: value(body.utm_content),
-      gclid: value(body.gclid),
+      gbraid: attributionValue(body.gbraid, 500),
+      wbraid: attributionValue(body.wbraid, 500),
+      landing_page: attributionValue(body.landing_page, 2048),
+      referrer: attributionValue(body.referrer, 2048),
+      lead_source: attributionValue(body.lead_source, 255),
+      // Bound existing attribution inputs to their database column sizes.
+      gclid: attributionValue(body.gclid, 500),
+      utm_source: attributionValue(body.utm_source, 255),
+      utm_medium: attributionValue(body.utm_medium, 255),
+      utm_campaign: attributionValue(body.utm_campaign, 255),
+      utm_term: attributionValue(body.utm_term, 255),
+      utm_content: attributionValue(body.utm_content, 255),
       nationality,
       travel_intent: travelIntent,
       financial_sponsorship_info: financialSponsorshipInfo,
@@ -276,7 +294,7 @@ export async function POST(request) {
       }
     }
     const saved = await db.insert('leads', lead);
-    return NextResponse.json({ success: true, lead: saved }, { status: 201 });
+    return NextResponse.json({ success: true, id: saved?.id }, { status: 201 });
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

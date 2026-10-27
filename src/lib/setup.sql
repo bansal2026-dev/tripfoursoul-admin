@@ -227,6 +227,11 @@ CREATE TABLE IF NOT EXISTS leads (
     utm_term VARCHAR(255) DEFAULT '',
     utm_content VARCHAR(255) DEFAULT '',
   gclid VARCHAR(500) DEFAULT '',
+  gbraid VARCHAR(500),
+  wbraid VARCHAR(500),
+  landing_page VARCHAR(2048),
+  referrer VARCHAR(2048),
+  lead_source VARCHAR(255),
   traveler_count INTEGER,
   travel_month VARCHAR(20) DEFAULT '',
   selected_additional_services JSONB DEFAULT '[]'::jsonb,
@@ -483,6 +488,12 @@ CREATE TABLE IF NOT EXISTS package_related_packages (
 ALTER TABLE IF EXISTS leads ADD COLUMN IF NOT EXISTS traveler_count INTEGER;
 ALTER TABLE IF EXISTS leads ADD COLUMN IF NOT EXISTS travel_month VARCHAR(20) DEFAULT '';
 ALTER TABLE IF EXISTS leads ADD COLUMN IF NOT EXISTS selected_additional_services JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE IF EXISTS leads
+  ADD COLUMN IF NOT EXISTS gbraid VARCHAR(500),
+  ADD COLUMN IF NOT EXISTS wbraid VARCHAR(500),
+  ADD COLUMN IF NOT EXISTS landing_page VARCHAR(2048),
+  ADD COLUMN IF NOT EXISTS referrer VARCHAR(2048),
+  ADD COLUMN IF NOT EXISTS lead_source VARCHAR(255);
 
 CREATE INDEX IF NOT EXISTS idx_packages_destination_id ON packages(destination_id);
 CREATE INDEX IF NOT EXISTS idx_packages_sort_order ON packages(sort_order);
